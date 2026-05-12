@@ -18,6 +18,10 @@ export interface Vehicle {
   status: "available" | "on_tour" | "maintenance" | "inactive";
   current_driver_id?: string;
   current_driver?: Driver;
+  length_m?: number;
+  width_m?: number;
+  height_m?: number;
+  payload_kg?: number;
   notes?: string;
   created_at: string;
 }

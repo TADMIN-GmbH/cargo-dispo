@@ -2,36 +2,40 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Vehicle, Driver } from "@/lib/types";
+import { Vehicle } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Truck, Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Truck, Plus, Search, Pencil, Trash2, SlidersHorizontal } from "lucide-react";
 
 const statusConfig = {
-  available: { label: "Verfügbar", variant: "success" as const },
-  on_tour: { label: "Auf Tour", variant: "default" as const },
-  maintenance: { label: "Wartung", variant: "warning" as const },
-  inactive: { label: "Inaktiv", variant: "secondary" as const },
+  available:   { label: "Verfügbar", variant: "success" as const },
+  on_tour:     { label: "Auf Tour",  variant: "default" as const },
+  maintenance: { label: "Wartung",   variant: "warning" as const },
+  inactive:    { label: "Inaktiv",   variant: "secondary" as const },
 };
+
+type ColKey = "type" | "status" | "driver" | "length" | "width" | "height" | "payload" | "notes";
+
+const ALL_COLUMNS: { key: ColKey; label: string }[] = [
+  { key: "type",    label: "Typ / Marke" },
+  { key: "status",  label: "Status" },
+  { key: "driver",  label: "Fahrer" },
+  { key: "length",  label: "Länge (m)" },
+  { key: "width",   label: "Breite (m)" },
+  { key: "height",  label: "Höhe (m)" },
+  { key: "payload", label: "Nutzlast (kg)" },
+  { key: "notes",   label: "Notizen" },
+];
+
+const DEFAULT_VISIBLE: ColKey[] = ["type", "status", "driver", "notes"];
 
 const emptyVehicle = {
   license_plate: "",
@@ -41,6 +45,10 @@ const emptyVehicle = {
   year: new Date().getFullYear(),
   status: "available" as const,
   current_driver_id: "",
+  length_m: "" as string | number,
+  width_m: "" as string | number,
+  height_m: "" as string | number,
+  payload_kg: "" as string | number,
   notes: "",
 };
 
@@ -50,8 +58,7 @@ interface TruckListProps {
   userRole: "admin" | "employee";
 }
 
-export function TruckList({ initialVehicles, availableDrivers, userRole }: TruckListProps) {
-  const router = useRouter();
+export function TruckList({ initialVehicles, availableDrivers }: TruckListProps) {
   const supabase = createClient();
   const [vehicles, setVehicles] = useState(initialVehicles);
   const [search, setSearch] = useState("");
@@ -59,7 +66,9 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
   const [editing, setEditing] = useState<Vehicle | null>(null);
   const [form, setForm] = useState(emptyVehicle);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(new Set(DEFAULT_VISIBLE));
 
   const filtered = vehicles.filter(
     (v) =>
@@ -68,9 +77,18 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
       v.brand?.toLowerCase().includes(search.toLowerCase())
   );
 
+  function toggleCol(key: ColKey) {
+    setVisibleCols((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
   function openCreate() {
     setEditing(null);
     setForm(emptyVehicle);
+    setSaveError("");
     setDialogOpen(true);
   }
 
@@ -84,13 +102,19 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
       year: v.year ?? new Date().getFullYear(),
       status: v.status as typeof emptyVehicle.status,
       current_driver_id: v.current_driver_id ?? "",
+      length_m: v.length_m ?? ("" as string | number),
+      width_m: v.width_m ?? ("" as string | number),
+      height_m: v.height_m ?? ("" as string | number),
+      payload_kg: v.payload_kg ?? ("" as string | number),
       notes: v.notes ?? "",
     });
+    setSaveError("");
     setDialogOpen(true);
   }
 
   async function handleSave() {
     setSaving(true);
+    setSaveError("");
     const payload = {
       license_plate: form.license_plate,
       type: form.type,
@@ -99,6 +123,10 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
       year: form.year || null,
       status: form.status,
       current_driver_id: form.current_driver_id || null,
+      length_m: form.length_m !== "" ? Number(form.length_m) : null,
+      width_m: form.width_m !== "" ? Number(form.width_m) : null,
+      height_m: form.height_m !== "" ? Number(form.height_m) : null,
+      payload_kg: form.payload_kg !== "" ? Number(form.payload_kg) : null,
       notes: form.notes || null,
     };
 
@@ -109,18 +137,16 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
         .eq("id", editing.id)
         .select("*, current_driver:current_driver_id(id, first_name, last_name)")
         .single();
-      if (!error && data) {
-        setVehicles((prev) => prev.map((v) => (v.id === editing.id ? data : v)));
-      }
+      if (error) { setSaveError(error.message); setSaving(false); return; }
+      if (data) setVehicles((prev) => prev.map((v) => (v.id === editing.id ? data : v)));
     } else {
       const { data, error } = await supabase
         .from("vehicles")
         .insert(payload)
         .select("*, current_driver:current_driver_id(id, first_name, last_name)")
         .single();
-      if (!error && data) {
-        setVehicles((prev) => [...prev, data]);
-      }
+      if (error) { setSaveError(error.message); setSaving(false); return; }
+      if (data) setVehicles((prev) => [...prev, data]);
     }
 
     setSaving(false);
@@ -128,12 +154,12 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
   }
 
   async function handleDelete(id: string) {
-    const { error } = await supabase.from("vehicles").delete().eq("id", id);
-    if (!error) {
-      setVehicles((prev) => prev.filter((v) => v.id !== id));
-    }
+    await supabase.from("vehicles").delete().eq("id", id);
+    setVehicles((prev) => prev.filter((v) => v.id !== id));
     setDeleteId(null);
   }
+
+  const colCount = 2 + visibleCols.size; // Kennzeichen + visible + Aktionen
 
   return (
     <div className="p-8">
@@ -151,28 +177,52 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <Input
-          placeholder="Suche nach Kennzeichen, Typ, Marke..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Input
+            placeholder="Suche nach Kennzeichen, Typ, Marke..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+
+        {/* Column visibility picker */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="gap-2 shrink-0">
+              <SlidersHorizontal className="w-4 h-4" />
+              Spalten
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-48 p-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Spalten anzeigen</p>
+            <div className="space-y-2">
+              {ALL_COLUMNS.map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer">
+                  <Checkbox
+                    checked={visibleCols.has(key)}
+                    onCheckedChange={() => toggleCol(key)}
+                  />
+                  <span className="text-sm text-gray-700">{label}</span>
+                </label>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
-      {/* Status Badges */}
+      {/* Status summary */}
       <div className="flex gap-3 mb-6 flex-wrap">
-        {Object.entries(statusConfig).map(([key, cfg]) => {
-          const count = vehicles.filter((v) => v.status === key).length;
-          return (
-            <div key={key} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
-              <Badge variant={cfg.variant}>{cfg.label}</Badge>
-              <span className="text-sm font-semibold text-gray-700">{count}</span>
-            </div>
-          );
-        })}
+        {Object.entries(statusConfig).map(([key, cfg]) => (
+          <div key={key} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
+            <Badge variant={cfg.variant}>{cfg.label}</Badge>
+            <span className="text-sm font-semibold text-gray-700">
+              {vehicles.filter((v) => v.status === key).length}
+            </span>
+          </div>
+        ))}
       </div>
 
       {/* Table */}
@@ -183,17 +233,21 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Kennzeichen</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Typ / Marke</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Fahrer</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Notizen</th>
+                  {visibleCols.has("type")    && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Typ / Marke</th>}
+                  {visibleCols.has("status")  && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>}
+                  {visibleCols.has("driver")  && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Fahrer</th>}
+                  {visibleCols.has("length")  && <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Länge (m)</th>}
+                  {visibleCols.has("width")   && <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Breite (m)</th>}
+                  {visibleCols.has("height")  && <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Höhe (m)</th>}
+                  {visibleCols.has("payload") && <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Nutzlast (kg)</th>}
+                  {visibleCols.has("notes")   && <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Notizen</th>}
                   <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Aktionen</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-gray-400">
+                    <td colSpan={colCount} className="text-center py-12 text-gray-400">
                       <Truck className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       <p className="text-sm">Keine Fahrzeuge gefunden</p>
                     </td>
@@ -207,20 +261,48 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
                         <td className="px-6 py-4">
                           <span className="font-mono font-semibold text-gray-900">{v.license_plate}</span>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {v.type && <span className="font-medium">{v.type}</span>}
-                          {v.brand && <span className="text-gray-400"> · {v.brand} {v.model}</span>}
-                          {v.year && <span className="text-gray-400"> ({v.year})</span>}
-                        </td>
-                        <td className="px-6 py-4">
-                          <Badge variant={status.variant}>{status.label}</Badge>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
-                          {driver ? `${driver.first_name} ${driver.last_name}` : <span className="text-gray-300">–</span>}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate">
-                          {v.notes || <span className="text-gray-300">–</span>}
-                        </td>
+                        {visibleCols.has("type") && (
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {v.type && <span className="font-medium">{v.type}</span>}
+                            {v.brand && <span className="text-gray-400"> · {v.brand}{v.model ? ` ${v.model}` : ""}</span>}
+                            {v.year && <span className="text-gray-400"> ({v.year})</span>}
+                          </td>
+                        )}
+                        {visibleCols.has("status") && (
+                          <td className="px-6 py-4">
+                            <Badge variant={status.variant}>{status.label}</Badge>
+                          </td>
+                        )}
+                        {visibleCols.has("driver") && (
+                          <td className="px-6 py-4 text-sm text-gray-600">
+                            {driver ? `${driver.first_name} ${driver.last_name}` : <span className="text-gray-300">–</span>}
+                          </td>
+                        )}
+                        {visibleCols.has("length") && (
+                          <td className="px-6 py-4 text-sm text-gray-600 text-right font-mono">
+                            {v.length_m ?? <span className="text-gray-300">–</span>}
+                          </td>
+                        )}
+                        {visibleCols.has("width") && (
+                          <td className="px-6 py-4 text-sm text-gray-600 text-right font-mono">
+                            {v.width_m ?? <span className="text-gray-300">–</span>}
+                          </td>
+                        )}
+                        {visibleCols.has("height") && (
+                          <td className="px-6 py-4 text-sm text-gray-600 text-right font-mono">
+                            {v.height_m ?? <span className="text-gray-300">–</span>}
+                          </td>
+                        )}
+                        {visibleCols.has("payload") && (
+                          <td className="px-6 py-4 text-sm text-gray-600 text-right font-mono">
+                            {v.payload_kg != null ? v.payload_kg.toLocaleString("de-DE") : <span className="text-gray-300">–</span>}
+                          </td>
+                        )}
+                        {visibleCols.has("notes") && (
+                          <td className="px-6 py-4 text-sm text-gray-500 max-w-[200px] truncate">
+                            {v.notes || <span className="text-gray-300">–</span>}
+                          </td>
+                        )}
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
                             <Button variant="ghost" size="icon" onClick={() => openEdit(v)}>
@@ -248,11 +330,12 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>{editing ? "Fahrzeug bearbeiten" : "Fahrzeug hinzufügen"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-2">
+            {/* Kennzeichen + Typ */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Kennzeichen *</Label>
@@ -271,43 +354,68 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
                 />
               </div>
             </div>
+
+            {/* Marke + Modell + Baujahr */}
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <Label>Marke</Label>
-                <Input
-                  placeholder="Mercedes"
-                  value={form.brand}
-                  onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                />
+                <Input placeholder="Mercedes" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
               </div>
               <div className="space-y-1.5">
                 <Label>Modell</Label>
-                <Input
-                  placeholder="Sprinter"
-                  value={form.model}
-                  onChange={(e) => setForm({ ...form, model: e.target.value })}
-                />
+                <Input placeholder="Actros" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
               </div>
               <div className="space-y-1.5">
                 <Label>Baujahr</Label>
-                <Input
-                  type="number"
-                  placeholder="2022"
-                  value={form.year}
-                  onChange={(e) => setForm({ ...form, year: parseInt(e.target.value) })}
-                />
+                <Input type="number" placeholder="2022" value={form.year} onChange={(e) => setForm({ ...form, year: parseInt(e.target.value) })} />
               </div>
             </div>
+
+            {/* Maße */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Maße & Nutzlast</p>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Länge (m)</Label>
+                  <Input
+                    type="number" step="0.1" placeholder="13,6"
+                    value={form.length_m}
+                    onChange={(e) => setForm({ ...form, length_m: e.target.value as unknown as number })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Breite (m)</Label>
+                  <Input
+                    type="number" step="0.1" placeholder="2,4"
+                    value={form.width_m}
+                    onChange={(e) => setForm({ ...form, width_m: e.target.value as unknown as number })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Höhe (m)</Label>
+                  <Input
+                    type="number" step="0.1" placeholder="2,7"
+                    value={form.height_m}
+                    onChange={(e) => setForm({ ...form, height_m: e.target.value as unknown as number })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Nutzlast (kg)</Label>
+                  <Input
+                    type="number" step="50" placeholder="24000"
+                    value={form.payload_kg}
+                    onChange={(e) => setForm({ ...form, payload_kg: e.target.value as unknown as number })}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Status + Fahrer */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label>Status</Label>
-                <Select
-                  value={form.status}
-                  onValueChange={(v) => setForm({ ...form, status: v as typeof form.status })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as typeof form.status })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="available">Verfügbar</SelectItem>
                     <SelectItem value="on_tour">Auf Tour</SelectItem>
@@ -318,37 +426,32 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
               </div>
               <div className="space-y-1.5">
                 <Label>Fahrer</Label>
-                <Select
-                  value={form.current_driver_id || "none"}
-                  onValueChange={(v) => setForm({ ...form, current_driver_id: v === "none" ? "" : v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Keiner" />
-                  </SelectTrigger>
+                <Select value={form.current_driver_id || "none"} onValueChange={(v) => setForm({ ...form, current_driver_id: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Keiner" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Keiner</SelectItem>
                     {availableDrivers.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>
-                        {d.first_name} {d.last_name}
-                      </SelectItem>
+                      <SelectItem key={d.id} value={d.id}>{d.first_name} {d.last_name}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
+
+            {/* Notizen */}
             <div className="space-y-1.5">
               <Label>Notizen</Label>
-              <Textarea
-                placeholder="Interne Notizen..."
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                rows={2}
-              />
+              <Textarea rows={2} placeholder="Interne Notizen..." value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
+
+            {saveError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+                Fehler: {saveError}
+              </div>
+            )}
+
             <div className="flex gap-3 justify-end pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>
-                Abbrechen
-              </Button>
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
               <Button onClick={handleSave} disabled={saving || !form.license_plate || !form.type}>
                 {saving ? "Speichern..." : editing ? "Aktualisieren" : "Hinzufügen"}
               </Button>
@@ -360,12 +463,8 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
       {/* Delete Dialog */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Fahrzeug löschen?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-gray-600">
-            Möchtest du dieses Fahrzeug wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
-          </p>
+          <DialogHeader><DialogTitle>Fahrzeug löschen?</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-600">Diese Aktion kann nicht rückgängig gemacht werden.</p>
           <div className="flex gap-3 justify-end">
             <Button variant="outline" onClick={() => setDeleteId(null)}>Abbrechen</Button>
             <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)}>Löschen</Button>
