@@ -1,38 +1,35 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface DateSelectorProps {
-  value: string; // YYYY-MM-DD
-}
 
 function todayStr() {
   return new Date().toISOString().split("T")[0];
 }
 
-function shiftDay(current: string, delta: number) {
-  const d = new Date(current + "T00:00:00");
+function shiftDay(date: string, delta: number) {
+  const d = new Date(date + "T00:00:00");
   d.setDate(d.getDate() + delta);
   return d.toISOString().split("T")[0];
 }
 
-export function DateSelector({ value }: DateSelectorProps) {
+export function DateSelector({ value }: { value: string }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const [localDate, setLocalDate] = useState(value);
-  const isDirty = localDate !== value;
 
-  useEffect(() => {
-    setLocalDate(value);
-  }, [value]);
-  const isToday = value === todayStr();
+  // appliedDate = what's actually active (confirmed)
+  // draftDate   = what the user has typed but not yet applied
+  const [appliedDate, setAppliedDate] = useState(value);
+  const [draftDate,   setDraftDate]   = useState(value);
 
-  function applyDate(date: string) {
+  const isDirty  = draftDate !== appliedDate;
+  const isToday  = appliedDate === todayStr();
+
+  function apply(date: string) {
     document.cookie = `app_date=${date}; path=/; max-age=86400`;
-    setLocalDate(date);
+    setAppliedDate(date);
+    setDraftDate(date);
     router.refresh();
   }
 
@@ -41,7 +38,7 @@ export function DateSelector({ value }: DateSelectorProps) {
       <Button
         variant="ghost" size="icon"
         className="h-8 w-8 text-gray-400 hover:text-gray-700"
-        onClick={() => applyDate(shiftDay(value, -1))}
+        onClick={() => apply(shiftDay(appliedDate, -1))}
       >
         <ChevronLeft className="w-4 h-4" />
       </Button>
@@ -50,14 +47,15 @@ export function DateSelector({ value }: DateSelectorProps) {
         <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
         <input
           type="date"
-          value={localDate}
-          onChange={e => e.target.value && setLocalDate(e.target.value)}
+          value={draftDate}
+          onChange={e => e.target.value && setDraftDate(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && isDirty && apply(draftDate)}
           className="text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer"
         />
       </div>
 
       {isDirty ? (
-        <Button size="sm" className="h-8 gap-1.5" onClick={() => applyDate(localDate)}>
+        <Button size="sm" className="h-8 gap-1.5" onClick={() => apply(draftDate)}>
           <Check className="w-3.5 h-3.5" />
           Übernehmen
         </Button>
@@ -65,7 +63,7 @@ export function DateSelector({ value }: DateSelectorProps) {
         <Button
           variant="ghost" size="icon"
           className="h-8 w-8 text-gray-400 hover:text-gray-700"
-          onClick={() => applyDate(shiftDay(value, 1))}
+          onClick={() => apply(shiftDay(appliedDate, 1))}
         >
           <ChevronRight className="w-4 h-4" />
         </Button>
@@ -75,7 +73,7 @@ export function DateSelector({ value }: DateSelectorProps) {
         <Button
           variant="ghost" size="sm"
           className="text-xs text-blue-500 hover:text-blue-700"
-          onClick={() => applyDate(todayStr())}
+          onClick={() => apply(todayStr())}
         >
           Heute
         </Button>
