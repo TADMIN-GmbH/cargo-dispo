@@ -42,16 +42,13 @@ export function DateSelector({ value }: DateSelectorProps) {
         <ChevronLeft className="w-4 h-4" />
       </Button>
 
-      <div className="relative flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-        <CalendarDays className="w-4 h-4 text-gray-400 pointer-events-none" />
-        <span className="text-sm font-medium text-gray-700 pointer-events-none">
-          {isToday ? "Heute" : label}
-        </span>
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+        <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
         <input
           type="date"
           defaultValue={value}
           onChange={e => e.target.value && navigate(e.target.value)}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          className="text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer"
         />
       </div>
 
