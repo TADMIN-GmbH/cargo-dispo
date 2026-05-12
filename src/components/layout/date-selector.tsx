@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { CalendarDays, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,10 @@ export function DateSelector({ value }: DateSelectorProps) {
   const pathname = usePathname();
   const [localDate, setLocalDate] = useState(value);
   const isDirty = localDate !== value;
+
+  useEffect(() => {
+    setLocalDate(value);
+  }, [value]);
   const isToday = value === todayStr();
 
   function applyDate(date: string) {
