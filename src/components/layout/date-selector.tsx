@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { CalendarDays, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -12,11 +13,6 @@ function todayStr() {
   return new Date().toISOString().split("T")[0];
 }
 
-function applyDate(date: string) {
-  document.cookie = `app_date=${date}; path=/; max-age=86400`;
-  window.location.reload();
-}
-
 function shiftDay(current: string, delta: number) {
   const d = new Date(current + "T00:00:00");
   d.setDate(d.getDate() + delta);
@@ -24,9 +20,17 @@ function shiftDay(current: string, delta: number) {
 }
 
 export function DateSelector({ value }: DateSelectorProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const [localDate, setLocalDate] = useState(value);
   const isDirty = localDate !== value;
   const isToday = value === todayStr();
+
+  function applyDate(date: string) {
+    document.cookie = `app_date=${date}; path=/; max-age=86400`;
+    router.push(pathname);
+    router.refresh();
+  }
 
   return (
     <div className="flex items-center gap-1">
@@ -44,7 +48,6 @@ export function DateSelector({ value }: DateSelectorProps) {
           type="date"
           value={localDate}
           onChange={e => e.target.value && setLocalDate(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && isDirty && applyDate(localDate)}
           className="text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer"
         />
       </div>
