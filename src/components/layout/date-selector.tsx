@@ -1,6 +1,7 @@
 "use client";
 
-import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface DateSelectorProps {
@@ -11,7 +12,7 @@ function todayStr() {
   return new Date().toISOString().split("T")[0];
 }
 
-function navigate(date: string) {
+function applyDate(date: string) {
   document.cookie = `app_date=${date}; path=/; max-age=86400`;
   window.location.reload();
 }
@@ -23,48 +24,51 @@ function shiftDay(current: string, delta: number) {
 }
 
 export function DateSelector({ value }: DateSelectorProps) {
+  const [localDate, setLocalDate] = useState(value);
+  const isDirty = localDate !== value;
   const isToday = value === todayStr();
-
-  const label = new Date(value + "T00:00:00").toLocaleDateString("de-DE", {
-    weekday: "short",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
 
   return (
     <div className="flex items-center gap-1">
       <Button
         variant="ghost" size="icon"
         className="h-8 w-8 text-gray-400 hover:text-gray-700"
-        onClick={() => navigate(shiftDay(value, -1))}
+        onClick={() => applyDate(shiftDay(value, -1))}
       >
         <ChevronLeft className="w-4 h-4" />
       </Button>
 
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg">
         <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
         <input
           type="date"
-          defaultValue={value}
-          onChange={e => e.target.value && navigate(e.target.value)}
+          value={localDate}
+          onChange={e => e.target.value && setLocalDate(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && isDirty && applyDate(localDate)}
           className="text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer"
         />
       </div>
 
-      <Button
-        variant="ghost" size="icon"
-        className="h-8 w-8 text-gray-400 hover:text-gray-700"
-        onClick={() => navigate(shiftDay(value, 1))}
-      >
-        <ChevronRight className="w-4 h-4" />
-      </Button>
+      {isDirty ? (
+        <Button size="sm" className="h-8 gap-1.5" onClick={() => applyDate(localDate)}>
+          <Check className="w-3.5 h-3.5" />
+          Übernehmen
+        </Button>
+      ) : (
+        <Button
+          variant="ghost" size="icon"
+          className="h-8 w-8 text-gray-400 hover:text-gray-700"
+          onClick={() => applyDate(shiftDay(value, 1))}
+        >
+          <ChevronRight className="w-4 h-4" />
+        </Button>
+      )}
 
-      {!isToday && (
+      {!isToday && !isDirty && (
         <Button
           variant="ghost" size="sm"
           className="text-xs text-blue-500 hover:text-blue-700"
-          onClick={() => navigate(todayStr())}
+          onClick={() => applyDate(todayStr())}
         >
           Heute
         </Button>
