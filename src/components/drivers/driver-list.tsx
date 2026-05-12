@@ -43,6 +43,7 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
   const [editing, setEditing] = useState<Driver | null>(null);
   const [form, setForm] = useState(emptyDriver);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const filtered = drivers.filter(
@@ -73,6 +74,7 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
 
   async function handleSave() {
     setSaving(true);
+    setSaveError("");
     const payload = {
       first_name: form.first_name,
       last_name: form.last_name,
@@ -84,19 +86,21 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
     };
 
     if (editing) {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("drivers")
         .update(payload)
         .eq("id", editing.id)
         .select("*, current_vehicle:vehicles(id, license_plate, type)")
         .single();
+      if (error) { setSaveError(error.message); setSaving(false); return; }
       if (data) setDrivers((prev) => prev.map((d) => (d.id === editing.id ? data : d)));
     } else {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("drivers")
         .insert(payload)
         .select("*, current_vehicle:vehicles(id, license_plate, type)")
         .single();
+      if (error) { setSaveError(error.message); setSaving(false); return; }
       if (data) setDrivers((prev) => [...prev, data]);
     }
 
@@ -281,6 +285,11 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
               <Label>Notizen</Label>
               <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
+            {saveError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
+                Fehler: {saveError}
+              </div>
+            )}
             <div className="flex gap-3 justify-end pt-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
               <Button onClick={handleSave} disabled={saving || !form.first_name || !form.last_name}>
