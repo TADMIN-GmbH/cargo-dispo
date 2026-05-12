@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { Truck, Users, Building2, MapPin, TrendingUp, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +7,8 @@ import { formatDate } from "@/lib/utils";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const cookieStore = await cookies();
+  const selectedDate = cookieStore.get("app_date")?.value ?? new Date().toISOString().split("T")[0];
 
   const [
     { count: vehicleCount },
@@ -21,13 +24,13 @@ export default async function DashboardPage() {
     supabase
       .from("tours")
       .select("*, driver:drivers(first_name,last_name), vehicle:vehicles(license_plate), customer:customers(company_name)")
-      .eq("tour_date", new Date().toISOString().split("T")[0])
+      .eq("tour_date", selectedDate)
       .order("created_at", { ascending: false }),
     supabase.from("vehicles").select("id").eq("status", "available"),
     supabase.from("drivers").select("id").eq("status", "on_tour"),
   ]);
 
-  const today = new Date().toLocaleDateString("de-DE", {
+  const today = new Date(selectedDate + "T00:00:00").toLocaleDateString("de-DE", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -62,7 +65,7 @@ export default async function DashboardPage() {
     {
       label: "Touren heute",
       value: todayTours?.length ?? 0,
-      sub: formatDate(new Date()),
+      sub: new Date(selectedDate + "T00:00:00").toLocaleDateString("de-DE"),
       icon: MapPin,
       color: "text-orange-600",
       bg: "bg-orange-50",

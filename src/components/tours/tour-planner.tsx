@@ -37,16 +37,18 @@ interface TourPlannerProps {
   drivers: Pick<Driver, "id" | "first_name" | "last_name" | "status">[];
   vehicles: Pick<Vehicle, "id" | "license_plate" | "type" | "status">[];
   customers: Pick<Customer, "id" | "company_name" | "city">[];
+  selectedDate?: string;
 }
 
-export function TourPlanner({ initialTours, drivers, vehicles, customers }: TourPlannerProps) {
+export function TourPlanner({ initialTours, drivers, vehicles, customers, selectedDate }: TourPlannerProps) {
   const supabase = createClient();
   const [tours, setTours] = useState(initialTours);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Tour | null>(null);
-  const [form, setForm] = useState(emptyTour);
+  const defaultDate = selectedDate ?? new Date().toISOString().split("T")[0];
+  const [form, setForm] = useState({ ...emptyTour, tour_date: defaultDate });
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
