@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Truck,
@@ -63,8 +64,8 @@ export function Sidebar({ userRole, userName, userEmail }: SidebarProps) {
       <div className="flex items-center justify-between p-4 border-b border-gray-700">
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-              <Truck className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center overflow-hidden">
+              <Image src="/ck-logo.png" alt="CK" width={32} height={32} className="object-contain" />
             </div>
             <div>
               <p className="text-sm font-bold text-white leading-tight">Cargo Köhler</p>
@@ -73,8 +74,8 @@ export function Sidebar({ userRole, userName, userEmail }: SidebarProps) {
           </div>
         )}
         {collapsed && (
-          <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mx-auto">
-            <Truck className="w-4 h-4 text-white" />
+          <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center overflow-hidden mx-auto">
+            <Image src="/ck-logo.png" alt="CK" width={32} height={32} className="object-contain" />
           </div>
         )}
         <button
