@@ -276,7 +276,7 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
                     <SelectItem value="none">Keines</SelectItem>
                     {availableVehicles.map((v) => (
                       <SelectItem key={v.id} value={v.id}>
-                        {v.license_plate} – {v.type}{v.status === "on_tour" ? " (auf Tour)" : v.status === "maintenance" ? " (Wartung)" : ""}
+                        {v.license_plate} – {v.type}{v.status === "maintenance" ? " (Wartung)" : v.status === "inactive" ? " (Inaktiv)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>

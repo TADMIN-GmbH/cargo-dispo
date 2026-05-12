@@ -12,7 +12,7 @@ export default async function DriversPage() {
     supabase
       .from("vehicles")
       .select("id, license_plate, type, status")
-      .neq("status", "inactive")
+      .neq("status", "on_tour")
       .order("license_plate"),
   ]);
 
