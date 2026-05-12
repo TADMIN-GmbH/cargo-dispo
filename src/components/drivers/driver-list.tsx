@@ -90,7 +90,7 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
         .from("drivers")
         .update(payload)
         .eq("id", editing.id)
-        .select("*, current_vehicle:vehicles(id, license_plate, type)")
+        .select("*, current_vehicle:current_vehicle_id(id, license_plate, type)")
         .single();
       if (error) { setSaveError(error.message); setSaving(false); return; }
       if (data) setDrivers((prev) => prev.map((d) => (d.id === editing.id ? data : d)));
@@ -98,7 +98,7 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
       const { data, error } = await supabase
         .from("drivers")
         .insert(payload)
-        .select("*, current_vehicle:vehicles(id, license_plate, type)")
+        .select("*, current_vehicle:current_vehicle_id(id, license_plate, type)")
         .single();
       if (error) { setSaveError(error.message); setSaving(false); return; }
       if (data) setDrivers((prev) => [...prev, data]);
