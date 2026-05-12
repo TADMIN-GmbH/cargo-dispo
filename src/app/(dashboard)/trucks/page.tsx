@@ -12,7 +12,7 @@ export default async function TrucksPage() {
     supabase
       .from("drivers")
       .select("id, first_name, last_name, status")
-      .eq("status", "available")
+      .neq("status", "on_tour")
       .order("last_name"),
   ]);
 

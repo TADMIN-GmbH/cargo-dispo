@@ -439,7 +439,9 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
                   <SelectContent>
                     <SelectItem value="none">Keiner</SelectItem>
                     {availableDrivers.map((d) => (
-                      <SelectItem key={d.id} value={d.id}>{d.first_name} {d.last_name}</SelectItem>
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.first_name} {d.last_name}{d.status === "sick" ? " (Krank)" : d.status === "off" ? " (Frei)" : ""}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
