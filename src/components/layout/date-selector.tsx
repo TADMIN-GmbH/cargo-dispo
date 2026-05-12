@@ -32,7 +32,7 @@ export function DateSelector({ value }: DateSelectorProps) {
 
   function applyDate(date: string) {
     document.cookie = `app_date=${date}; path=/; max-age=86400`;
-    router.push(pathname);
+    setLocalDate(date);
     router.refresh();
   }
 
