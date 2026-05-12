@@ -107,7 +107,7 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
         .from("vehicles")
         .update(payload)
         .eq("id", editing.id)
-        .select("*, current_driver:drivers(id, first_name, last_name)")
+        .select("*, current_driver:current_driver_id(id, first_name, last_name)")
         .single();
       if (!error && data) {
         setVehicles((prev) => prev.map((v) => (v.id === editing.id ? data : v)));
@@ -116,7 +116,7 @@ export function TruckList({ initialVehicles, availableDrivers, userRole }: Truck
       const { data, error } = await supabase
         .from("vehicles")
         .insert(payload)
-        .select("*, current_driver:drivers(id, first_name, last_name)")
+        .select("*, current_driver:current_driver_id(id, first_name, last_name)")
         .single();
       if (!error && data) {
         setVehicles((prev) => [...prev, data]);
