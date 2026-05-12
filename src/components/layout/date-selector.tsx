@@ -1,7 +1,5 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -9,38 +7,25 @@ interface DateSelectorProps {
   value: string; // YYYY-MM-DD
 }
 
-const todayStr = () => new Date().toISOString().split("T")[0];
+function todayStr() {
+  return new Date().toISOString().split("T")[0];
+}
+
+function navigate(date: string) {
+  document.cookie = `app_date=${date}; path=/; max-age=86400`;
+  window.location.reload();
+}
+
+function shiftDay(current: string, delta: number) {
+  const d = new Date(current + "T00:00:00");
+  d.setDate(d.getDate() + delta);
+  return d.toISOString().split("T")[0];
+}
 
 export function DateSelector({ value }: DateSelectorProps) {
-  const router = useRouter();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [localDate, setLocalDate] = useState(value);
+  const isToday = value === todayStr();
 
-  function applyDate(date: string) {
-    if (!date) return;
-    document.cookie = `app_date=${date}; path=/; max-age=86400`;
-    router.refresh();
-  }
-
-  function changeDay(delta: number) {
-    const d = new Date(localDate + "T00:00:00");
-    d.setDate(d.getDate() + delta);
-    const next = d.toISOString().split("T")[0];
-    setLocalDate(next);
-    applyDate(next);
-  }
-
-  function openPicker() {
-    try {
-      (inputRef.current as any)?.showPicker();
-    } catch {
-      inputRef.current?.click();
-    }
-  }
-
-  const isToday = localDate === todayStr();
-
-  const displayLabel = new Date(localDate + "T00:00:00").toLocaleDateString("de-DE", {
+  const label = new Date(value + "T00:00:00").toLocaleDateString("de-DE", {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
@@ -49,40 +34,40 @@ export function DateSelector({ value }: DateSelectorProps) {
 
   return (
     <div className="flex items-center gap-1">
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-700" onClick={() => changeDay(-1)}>
+      <Button
+        variant="ghost" size="icon"
+        className="h-8 w-8 text-gray-400 hover:text-gray-700"
+        onClick={() => navigate(shiftDay(value, -1))}
+      >
         <ChevronLeft className="w-4 h-4" />
       </Button>
 
-      <button
-        onClick={openPicker}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors min-w-[160px] justify-center"
+      <div className="relative flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
+        <CalendarDays className="w-4 h-4 text-gray-400 pointer-events-none" />
+        <span className="text-sm font-medium text-gray-700 pointer-events-none">
+          {isToday ? "Heute" : label}
+        </span>
+        <input
+          type="date"
+          defaultValue={value}
+          onChange={e => e.target.value && navigate(e.target.value)}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        />
+      </div>
+
+      <Button
+        variant="ghost" size="icon"
+        className="h-8 w-8 text-gray-400 hover:text-gray-700"
+        onClick={() => navigate(shiftDay(value, 1))}
       >
-        <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
-        {isToday ? "Heute" : displayLabel}
-      </button>
-
-      {/* hidden native date input – opened via showPicker() */}
-      <input
-        ref={inputRef}
-        type="date"
-        value={localDate}
-        onChange={e => {
-          if (!e.target.value) return;
-          setLocalDate(e.target.value);
-          applyDate(e.target.value);
-        }}
-        className="sr-only"
-      />
-
-      <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-400 hover:text-gray-700" onClick={() => changeDay(1)}>
         <ChevronRight className="w-4 h-4" />
       </Button>
 
       {!isToday && (
         <Button
           variant="ghost" size="sm"
-          className="text-xs text-blue-500 hover:text-blue-700 ml-1"
-          onClick={() => { setLocalDate(todayStr()); applyDate(todayStr()); }}
+          className="text-xs text-blue-500 hover:text-blue-700"
+          onClick={() => navigate(todayStr())}
         >
           Heute
         </Button>
