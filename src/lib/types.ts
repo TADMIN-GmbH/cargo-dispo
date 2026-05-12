@@ -21,6 +21,7 @@ export interface Vehicle {
   registration_date?: string;
   vin?: string;
   tire_size?: string;
+  towing_vehicle_id?: string;
   length_m?: number;
   width_m?: number;
   height_m?: number;
