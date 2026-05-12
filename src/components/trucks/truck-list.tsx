@@ -71,6 +71,7 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
   const [saveError, setSaveError] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(new Set(DEFAULT_VISIBLE));
+  const [dialogDrivers, setDialogDrivers] = useState(availableDrivers);
 
   const filtered = vehicles.filter(
     (v) =>
@@ -91,11 +92,18 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
     setEditing(null);
     setForm(emptyVehicle);
     setSaveError("");
+    setDialogDrivers(availableDrivers);
     setDialogOpen(true);
   }
 
   function openEdit(v: Vehicle) {
     setEditing(v);
+    const currentDriver = (v as any).current_driver;
+    if (currentDriver && !availableDrivers.find((d) => d.id === currentDriver.id)) {
+      setDialogDrivers([{ id: currentDriver.id, first_name: currentDriver.first_name, last_name: currentDriver.last_name, status: "on_tour" }, ...availableDrivers]);
+    } else {
+      setDialogDrivers(availableDrivers);
+    }
     setForm({
       license_plate: v.license_plate,
       type: v.type ?? "",
@@ -456,9 +464,9 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
                   <SelectTrigger><SelectValue placeholder="Keiner" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Keiner</SelectItem>
-                    {availableDrivers.map((d) => (
+                    {dialogDrivers.map((d) => (
                       <SelectItem key={d.id} value={d.id}>
-                        {d.first_name} {d.last_name}{d.status === "sick" ? " (Krank)" : d.status === "off" ? " (Frei)" : ""}
+                        {d.first_name} {d.last_name}{d.status === "sick" ? " (Krank)" : d.status === "off" ? " (Frei)" : d.status === "on_tour" ? " (Auf Tour)" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
