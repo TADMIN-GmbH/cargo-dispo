@@ -356,6 +356,8 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
                     <SelectItem value="SZM">SZM</SelectItem>
                     <SelectItem value="Auflieger">Auflieger</SelectItem>
                     <SelectItem value="Anhänger">Anhänger</SelectItem>
+                    <SelectItem value="Transporter">Transporter</SelectItem>
+                    <SelectItem value="PKW">PKW</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
