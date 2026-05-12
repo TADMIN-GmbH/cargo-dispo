@@ -64,6 +64,59 @@ export async function POST(request: NextRequest) {
     return new Response("OK", { status: 200 });
   }
 
+  // Rollkarte reply detection: "Rollkarte 12345" or just a number after a rollkarte request
+  const rollkarteMatch = transcript.match(/^(?:rollkarte[:\s]+)?(\d{3,10})\s*$/i);
+  if (rollkarteMatch) {
+    const rollkarteNumber = rollkarteMatch[1];
+    const today = new Date().toISOString().split("T")[0];
+
+    // Find the driver by phone number
+    const senderPhone = from.replace(/^whatsapp:/, "");
+    const { data: driver } = await supabase
+      .from("drivers")
+      .select("id, first_name, last_name")
+      .eq("phone", senderPhone)
+      .maybeSingle();
+
+    if (driver) {
+      // Find tours today for this driver that are in requested/pending status
+      const { data: pendingTours } = await supabase
+        .from("tours")
+        .select("id, customer:customers(company_name)")
+        .eq("tour_date", today)
+        .eq("driver_id", driver.id)
+        .in("rollkarte_status", ["pending", "requested"]);
+
+      if (pendingTours && pendingTours.length === 1) {
+        const tour = pendingTours[0] as any;
+        await supabase.from("tours").update({
+          rollkarte_number: rollkarteNumber,
+          rollkarte_status: "received",
+          rollkarte_answered_at: new Date().toISOString(),
+          rollkarte_source: "whatsapp",
+          rollkarte_updated_by: `${driver.first_name} ${driver.last_name}`,
+        }).eq("id", tour.id);
+
+        await sendReply(from, `✅ Rollkartennummer ${rollkarteNumber} für ${tour.customer?.company_name ?? "deine Tour"} gespeichert. Danke!`);
+        return new Response("OK", { status: 200 });
+      } else if (pendingTours && pendingTours.length > 1) {
+        // Ambiguous: multiple tours → store number on all, flag for manual review
+        for (const tour of pendingTours) {
+          await supabase.from("tours").update({
+            rollkarte_number: rollkarteNumber,
+            rollkarte_status: "received",
+            rollkarte_answered_at: new Date().toISOString(),
+            rollkarte_source: "whatsapp",
+            rollkarte_updated_by: `${driver.first_name} ${driver.last_name} (mehrdeutig)`,
+          }).eq("id", (tour as any).id);
+        }
+        await sendReply(from, `⚠️ Du hast heute ${pendingTours.length} Touren. Rollkartennummer ${rollkarteNumber} wurde bei allen eingetragen — bitte im Portal prüfen.`);
+        return new Response("OK", { status: 200 });
+      }
+    }
+    // If no driver found or no pending tours, fall through to normal GPT processing
+  }
+
   const { data: drivers } = await supabase.from("drivers").select("id, first_name, last_name");
   const { data: vehicles } = await supabase.from("vehicles").select("id, license_plate, type");
   const { data: customers } = await supabase.from("customers").select("id, company_name");

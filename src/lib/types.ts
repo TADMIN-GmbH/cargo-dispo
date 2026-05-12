@@ -40,6 +40,7 @@ export interface Driver {
   status: "available" | "on_tour" | "off" | "sick";
   current_vehicle_id?: string;
   current_vehicle?: Vehicle;
+  rollkarte_whatsapp_enabled?: boolean;
   notes?: string;
   created_at: string;
 }
@@ -71,6 +72,12 @@ export interface Tour {
   pickup_address?: string;
   delivery_address?: string;
   notes?: string;
+  rollkarte_number?: string;
+  rollkarte_status: "pending" | "requested" | "received" | "manual";
+  rollkarte_requested_at?: string;
+  rollkarte_answered_at?: string;
+  rollkarte_source?: "whatsapp" | "manual";
+  rollkarte_updated_by?: string;
   created_by?: string;
   created_at: string;
 }

@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Users, Plus, Search, Pencil, Trash2, Phone } from "lucide-react";
+import { Users, Plus, Search, Pencil, Trash2, Phone, MessageCircle } from "lucide-react";
 
 const statusConfig = {
   available: { label: "Verfügbar", variant: "success" as const },
@@ -27,6 +27,7 @@ const emptyDriver = {
   license_class: "",
   status: "available" as const,
   current_vehicle_id: "",
+  rollkarte_whatsapp_enabled: false,
   notes: "",
 };
 
@@ -67,6 +68,7 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
       license_class: d.license_class ?? "",
       status: d.status as typeof emptyDriver.status,
       current_vehicle_id: d.current_vehicle_id ?? "",
+      rollkarte_whatsapp_enabled: d.rollkarte_whatsapp_enabled ?? false,
       notes: d.notes ?? "",
     });
     setDialogOpen(true);
@@ -82,6 +84,7 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
       license_class: form.license_class || null,
       status: form.status,
       current_vehicle_id: form.current_vehicle_id || null,
+      rollkarte_whatsapp_enabled: form.rollkarte_whatsapp_enabled,
       notes: form.notes || null,
     };
 
@@ -283,6 +286,31 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
                 </Select>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={() => setForm({ ...form, rollkarte_whatsapp_enabled: !form.rollkarte_whatsapp_enabled })}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-lg border-2 transition-colors ${
+                form.rollkarte_whatsapp_enabled
+                  ? "border-green-500 bg-green-50"
+                  : "border-gray-200 bg-gray-50 hover:bg-gray-100"
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <MessageCircle className={`w-4 h-4 ${form.rollkarte_whatsapp_enabled ? "text-green-600" : "text-gray-400"}`} />
+                <div className="text-left">
+                  <p className={`text-sm font-medium ${form.rollkarte_whatsapp_enabled ? "text-green-800" : "text-gray-600"}`}>
+                    WhatsApp Rollkarte
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    {form.rollkarte_whatsapp_enabled ? "Fahrer erhält tägliche Anfrage" : "Keine automatische Anfrage"}
+                  </p>
+                </div>
+              </div>
+              <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${form.rollkarte_whatsapp_enabled ? "bg-green-500 justify-end" : "bg-gray-300 justify-start"}`}>
+                <div className="w-4 h-4 rounded-full bg-white shadow-sm" />
+              </div>
+            </button>
+
             <div className="space-y-1.5">
               <Label>Notizen</Label>
               <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

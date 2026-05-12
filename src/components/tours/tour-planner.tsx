@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { MapPin, Plus, Search, Pencil, Trash2, Filter } from "lucide-react";
+import { MapPin, Plus, Search, Pencil, Trash2, Filter, Hash } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 const statusConfig = {
@@ -19,6 +19,13 @@ const statusConfig = {
   active: { label: "Aktiv", variant: "success" as const },
   completed: { label: "Abgeschlossen", variant: "secondary" as const },
   cancelled: { label: "Abgesagt", variant: "destructive" as const },
+};
+
+const rollkarteStatusConfig = {
+  pending:   { label: "Ausstehend", className: "bg-gray-100 text-gray-500" },
+  requested: { label: "Angefragt",  className: "bg-yellow-100 text-yellow-700" },
+  received:  { label: "Erhalten",   className: "bg-green-100 text-green-700" },
+  manual:    { label: "Manuell",    className: "bg-blue-100 text-blue-700" },
 };
 
 const emptyTour = {
@@ -51,6 +58,8 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
   const [form, setForm] = useState({ ...emptyTour, tour_date: defaultDate });
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [rollkarteTourId, setRollkarteTourId] = useState<string | null>(null);
+  const [rollkarteInput, setRollkarteInput] = useState("");
 
   const filtered = tours.filter((t) => {
     const customer = (t as any).customer;
@@ -65,7 +74,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
 
   function openCreate() {
     setEditing(null);
-    setForm(emptyTour);
+    setForm({ ...emptyTour, tour_date: defaultDate });
     setDialogOpen(true);
   }
 
@@ -115,6 +124,18 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
     await supabase.from("tours").delete().eq("id", id);
     setTours((prev) => prev.filter((t) => t.id !== id));
     setDeleteId(null);
+  }
+
+  async function saveRollkarte() {
+    if (!rollkarteTourId) return;
+    const num = rollkarteInput.trim();
+    const update = num
+      ? { rollkarte_number: num, rollkarte_status: "manual", rollkarte_source: "manual", rollkarte_answered_at: new Date().toISOString() }
+      : { rollkarte_number: null, rollkarte_status: "pending", rollkarte_source: null, rollkarte_answered_at: null };
+    const { data } = await supabase.from("tours").update(update).eq("id", rollkarteTourId).select("*").single();
+    if (data) setTours((prev) => prev.map((t) => (t.id === rollkarteTourId ? { ...t, ...data } : t)));
+    setRollkarteTourId(null);
+    setRollkarteInput("");
   }
 
   return (
@@ -170,13 +191,14 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Fahrzeug</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Lieferadresse</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Rollkarte</th>
                   <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Aktionen</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-gray-400">
+                    <td colSpan={8} className="text-center py-12 text-gray-400">
                       <MapPin className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       <p className="text-sm">Keine Touren gefunden</p>
                     </td>
@@ -207,6 +229,22 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
                         </td>
                         <td className="px-6 py-4">
                           <Badge variant={status.variant}>{status.label}</Badge>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => { setRollkarteTourId(t.id); setRollkarteInput(t.rollkarte_number ?? ""); }}
+                            className="flex items-center gap-1.5 group"
+                          >
+                            {t.rollkarte_number ? (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-semibold ${rollkarteStatusConfig[t.rollkarte_status ?? "pending"]?.className}`}>
+                                <Hash className="w-3 h-3" />{t.rollkarte_number}
+                              </span>
+                            ) : (
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${rollkarteStatusConfig[t.rollkarte_status ?? "pending"]?.className}`}>
+                                {rollkarteStatusConfig[t.rollkarte_status ?? "pending"]?.label}
+                              </span>
+                            )}
+                          </button>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -323,6 +361,31 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
           <div className="flex gap-3 justify-end">
             <Button variant="outline" onClick={() => setDeleteId(null)}>Abbrechen</Button>
             <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)}>Löschen</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!rollkarteTourId} onOpenChange={(open) => { if (!open) { setRollkarteTourId(null); setRollkarteInput(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Rollkartennummer eingeben</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div className="space-y-1.5">
+              <Label>Rollkartennummer</Label>
+              <Input
+                placeholder="z.B. 12345"
+                value={rollkarteInput}
+                onChange={(e) => setRollkarteInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && saveRollkarte()}
+                autoFocus
+              />
+            </div>
+            {rollkarteInput === "" && (
+              <p className="text-xs text-gray-400">Leer lassen zum Zurücksetzen auf „Ausstehend".</p>
+            )}
+            <div className="flex gap-3 justify-end pt-1">
+              <Button variant="outline" onClick={() => { setRollkarteTourId(null); setRollkarteInput(""); }}>Abbrechen</Button>
+              <Button onClick={saveRollkarte}>Speichern</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
