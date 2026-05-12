@@ -67,7 +67,7 @@ export function Sidebar({ userRole, userName, userEmail }: SidebarProps) {
               <Truck className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-sm font-bold text-white leading-tight">CargoKöhler</p>
+              <p className="text-sm font-bold text-white leading-tight">Cargo Köhler</p>
               <p className="text-xs text-gray-400">Disposition</p>
             </div>
           </div>

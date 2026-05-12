@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
   const today = new Date().toISOString().split("T")[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
 
-  const systemPrompt = `Du bist ein Dispatcher-Assistent für das Speditionsunternehmen CargoKöhler.
+  const systemPrompt = `Du bist ein Dispatcher-Assistent für das Speditionsunternehmen Cargo Köhler.
 
 Analysiere den Befehl und gib IMMER nur JSON zurück:
 
