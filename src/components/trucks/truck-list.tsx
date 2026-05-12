@@ -347,11 +347,17 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
               </div>
               <div className="space-y-1.5">
                 <Label>Typ *</Label>
-                <Input
-                  placeholder="z.B. LKW 7,5t"
-                  value={form.type}
-                  onChange={(e) => setForm({ ...form, type: e.target.value })}
-                />
+                <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
+                  <SelectTrigger><SelectValue placeholder="Typ wählen" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="MW 12t">MW 12t</SelectItem>
+                    <SelectItem value="MW 18t">MW 18t</SelectItem>
+                    <SelectItem value="MW 26t">MW 26t</SelectItem>
+                    <SelectItem value="SZM">SZM</SelectItem>
+                    <SelectItem value="Auflieger">Auflieger</SelectItem>
+                    <SelectItem value="Anhänger">Anhänger</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
