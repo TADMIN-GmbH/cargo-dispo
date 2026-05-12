@@ -22,8 +22,7 @@ export default async function DashboardPage() {
       .from("tours")
       .select("*, driver:drivers(first_name,last_name), vehicle:vehicles(license_plate), customer:customers(company_name)")
       .eq("tour_date", new Date().toISOString().split("T")[0])
-      .order("created_at", { ascending: false })
-      .limit(5),
+      .order("created_at", { ascending: false }),
     supabase.from("vehicles").select("id").eq("status", "available"),
     supabase.from("drivers").select("id").eq("status", "on_tour"),
   ]);
@@ -70,12 +69,19 @@ export default async function DashboardPage() {
     },
   ];
 
-  const tourStatusMap: Record<string, { label: string; variant: "success" | "default" | "warning" | "destructive" | "secondary" }> = {
-    planned: { label: "Geplant", variant: "default" },
-    active: { label: "Aktiv", variant: "success" },
-    completed: { label: "Abgeschlossen", variant: "secondary" },
-    cancelled: { label: "Abgesagt", variant: "destructive" },
-  };
+  // Group tours by customer
+  type TourEntry = { customer_name: string; count: number; vehicles: string[] };
+  const toursPerCustomer: TourEntry[] = [];
+  if (todayTours) {
+    const grouped: Record<string, TourEntry> = {};
+    for (const t of todayTours as any[]) {
+      const name = t.customer?.company_name ?? "Ohne Kunde";
+      if (!grouped[name]) grouped[name] = { customer_name: name, count: 0, vehicles: [] };
+      grouped[name].count++;
+      if (t.vehicle?.license_plate) grouped[name].vehicles.push(t.vehicle.license_plate);
+    }
+    toursPerCustomer.push(...Object.values(grouped).sort((a, b) => b.count - a.count));
+  }
 
   return (
     <div className="p-8">
@@ -117,32 +123,30 @@ export default async function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {!todayTours || todayTours.length === 0 ? (
+            {toursPerCustomer.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <MapPin className="w-8 h-8 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">Keine Touren für heute</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {todayTours.map((tour: any) => {
-                  const status = tourStatusMap[tour.status] ?? { label: tour.status, variant: "secondary" };
-                  return (
-                    <div key={tour.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {tour.customer?.company_name ?? "–"}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {tour.driver
-                            ? `${tour.driver.first_name} ${tour.driver.last_name}`
-                            : "Kein Fahrer"}
-                          {tour.vehicle ? ` · ${tour.vehicle.license_plate}` : ""}
-                        </p>
+              <div className="space-y-2">
+                {toursPerCustomer.map((entry) => (
+                  <div key={entry.customer_name} className="flex items-center justify-between px-4 py-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                        <Building2 className="w-4 h-4 text-blue-600" />
                       </div>
-                      <Badge variant={status.variant}>{status.label}</Badge>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{entry.customer_name}</p>
+                        <p className="text-xs text-gray-400 truncate">{entry.vehicles.join(" · ") || "–"}</p>
+                      </div>
                     </div>
-                  );
-                })}
+                    <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                      <Truck className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm font-bold text-gray-700">{entry.count}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </CardContent>
