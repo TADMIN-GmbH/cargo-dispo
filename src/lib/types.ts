@@ -18,6 +18,9 @@ export interface Vehicle {
   status: "available" | "on_tour" | "maintenance" | "inactive";
   current_driver_id?: string;
   current_driver?: Driver;
+  registration_date?: string;
+  vin?: string;
+  tire_size?: string;
   length_m?: number;
   width_m?: number;
   height_m?: number;

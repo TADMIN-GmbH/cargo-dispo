@@ -42,7 +42,9 @@ const emptyVehicle = {
   type: "",
   brand: "",
   model: "",
-  year: new Date().getFullYear(),
+  registration_date: "",
+  vin: "",
+  tire_size: "",
   status: "available" as const,
   current_driver_id: "",
   length_m: "" as string | number,
@@ -99,7 +101,9 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       type: v.type ?? "",
       brand: v.brand ?? "",
       model: v.model ?? "",
-      year: v.year ?? new Date().getFullYear(),
+      registration_date: v.registration_date ?? "",
+      vin: v.vin ?? "",
+      tire_size: v.tire_size ?? "",
       status: v.status as typeof emptyVehicle.status,
       current_driver_id: v.current_driver_id ?? "",
       length_m: v.length_m ?? ("" as string | number),
@@ -120,7 +124,9 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       type: form.type,
       brand: form.brand || null,
       model: form.model || null,
-      year: form.year || null,
+      registration_date: form.registration_date || null,
+      vin: form.vin || null,
+      tire_size: form.tire_size || null,
       status: form.status,
       current_driver_id: form.current_driver_id || null,
       length_m: form.length_m !== "" ? Number(form.length_m) : null,
@@ -265,7 +271,7 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
                           <td className="px-6 py-4 text-sm text-gray-600">
                             {v.type && <span className="font-medium">{v.type}</span>}
                             {v.brand && <span className="text-gray-400"> · {v.brand}{v.model ? ` ${v.model}` : ""}</span>}
-                            {v.year && <span className="text-gray-400"> ({v.year})</span>}
+                            {v.registration_date && <span className="text-gray-400"> ({new Date(v.registration_date).toLocaleDateString("de-DE")})</span>}
                           </td>
                         )}
                         {visibleCols.has("status") && (
@@ -374,8 +380,20 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
                 <Input placeholder="Actros" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
               </div>
               <div className="space-y-1.5">
-                <Label>Baujahr</Label>
-                <Input type="number" placeholder="2022" value={form.year} onChange={(e) => setForm({ ...form, year: parseInt(e.target.value) })} />
+                <Label>Erstzulassung</Label>
+                <Input type="date" value={form.registration_date} onChange={(e) => setForm({ ...form, registration_date: e.target.value })} />
+              </div>
+            </div>
+
+            {/* VIN + Reifengröße */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>VIN / FIN</Label>
+                <Input placeholder="WDB9505371L..." value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value.toUpperCase() })} className="font-mono text-sm" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Reifengröße</Label>
+                <Input placeholder="315/80 R22.5" value={form.tire_size} onChange={(e) => setForm({ ...form, tire_size: e.target.value })} />
               </div>
             </div>
 
