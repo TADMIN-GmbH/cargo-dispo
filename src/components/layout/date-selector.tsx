@@ -36,16 +36,15 @@ export function DateSelector({ value }: DateSelectorProps) {
           Heute
         </Button>
       )}
-      <label className="relative flex items-center gap-2 cursor-pointer bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
-        <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
-        <span className="text-sm font-medium text-gray-700 whitespace-nowrap">{displayLabel}</span>
+      <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors">
+        <CalendarDays className="w-4 h-4 text-gray-400 shrink-0 pointer-events-none" />
         <input
           type="date"
           value={value}
           onChange={e => e.target.value && setDate(e.target.value)}
-          className="absolute inset-0 opacity-0 cursor-pointer w-full"
+          className="text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer"
         />
-      </label>
+      </div>
     </div>
   );
 }
