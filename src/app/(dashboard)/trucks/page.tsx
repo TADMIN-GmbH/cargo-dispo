@@ -7,7 +7,7 @@ export default async function TrucksPage() {
   const [{ data: vehicles }, { data: drivers }] = await Promise.all([
     supabase
       .from("vehicles")
-      .select("*, current_driver:drivers(id, first_name, last_name)")
+      .select("*, current_driver:current_driver_id(id, first_name, last_name)")
       .order("license_plate"),
     supabase
       .from("drivers")
