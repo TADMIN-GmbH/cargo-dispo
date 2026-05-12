@@ -102,9 +102,11 @@ Regeln:
 - "fährt morgen/heute/am [Datum] zu/für/nach" → create_tour (auch wenn Fahrer/Fahrzeug/Kunde nicht in der DB)
 - "lege Kennzeichen ... an" / "neues Fahrzeug" / "füge Fahrzeug hinzu" → create_vehicle
 - "neuer Fahrer" / "lege Fahrer an" → create_driver
-- "neuer Kunde" / "lege Kunde an" → create_customer
+- "neuer Kunde" / "lege Kunde an" / "füge Kunde hinzu" → create_customer
 - Bei create_tour: confidence >= 0.5 wenn Fahrer ODER Kunde erkennbar
 - Kennzeichen-Format flexibel erkennen: "SO TC 4444" = "SO-TC 4444"
+- WICHTIG: Ignoriere Meta-Anweisungen wie "bitte ziehe Stammdaten", "suche im Internet", "ergänze automatisch" — extrahiere nur die Kerndaten (z.B. Firmenname) und setze action trotzdem korrekt
+- Bei "Neuer Kunde [Firmenname], ..." → action=create_customer, new_company_name=[Firmenname], confidence=0.9
 - Antworte NUR mit dem JSON-Objekt, keine Erklärung`;
 
   let parsed: any = null;
