@@ -46,10 +46,11 @@ export function DateSelector({ value }: { value: string }) {
       <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 rounded-lg">
         <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
         <input
+          key={appliedDate}
           type="date"
-          value={draftDate}
+          defaultValue={appliedDate}
           onChange={e => e.target.value && setDraftDate(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && isDirty && apply(draftDate)}
+          onKeyDown={e => e.key === "Enter" && apply((e.target as HTMLInputElement).value)}
           className="text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer"
         />
       </div>
