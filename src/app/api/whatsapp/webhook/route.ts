@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
 Analysiere den Befehl und gib IMMER nur JSON zurück:
 
 {
-  "action": "create_tour" | "create_vehicle" | "create_driver" | "create_customer" | "unknown",
+  "action": "create_tour" | "copy_yesterday_tours" | "create_vehicle" | "create_driver" | "create_customer" | "unknown",
   "confidence": 0.0-1.0,
   "tour_date": "YYYY-MM-DD",
   "driver_name": "Name des Fahrers (Vor- oder Nachname)",
@@ -152,6 +152,7 @@ Bekannte Kennzeichen: ${vehicles?.map((v: any) => `${v.license_plate} (${v.type}
 Bekannte Kunden: ${customers?.map((c: any) => c.company_name).join(", ") || "noch keine"}
 
 Regeln:
+- "übernimm/kopiere Touren von gestern" / "gleiche Touren wie gestern" / "Touren von gestern für heute" → copy_yesterday_tours, confidence=0.95
 - "fährt morgen/heute/am [Datum] zu/für/nach" → create_tour (auch wenn Fahrer/Fahrzeug/Kunde nicht in der DB)
 - "lege Kennzeichen ... an" / "neues Fahrzeug" / "füge Fahrzeug hinzu" → create_vehicle
 - "neuer Fahrer" / "lege Fahrer an" → create_driver
@@ -231,6 +232,34 @@ Regeln:
           : parsed.customer_name ? `⚠️ Kunde "${parsed.customer_name}" nicht in DB — bitte manuell zuweisen\n` : "";
       } else {
         replyMessage += `❌ Fehler beim Anlegen der Tour: ${error.message}`;
+      }
+    } else if (parsed.action === "copy_yesterday_tours") {
+      const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+
+      const { data: yesterdayTours } = await supabase
+        .from("tours")
+        .select("driver_id, vehicle_id, customer_id, pickup_address, delivery_address, notes")
+        .eq("tour_date", yesterday)
+        .neq("status", "cancelled");
+
+      if (!yesterdayTours || yesterdayTours.length === 0) {
+        replyMessage += `⚠️ Keine Touren von gestern (${yesterday}) gefunden.`;
+      } else {
+        const newTours = yesterdayTours.map((t) => ({
+          ...t,
+          tour_date: today,
+          status: "planned",
+          rollkarte_status: "pending",
+          notes: t.notes ? `${t.notes} | Kopie von ${yesterday}` : `Kopie von ${yesterday}`,
+        }));
+
+        const { error } = await supabase.from("tours").insert(newTours);
+        if (!error) {
+          success = true;
+          replyMessage += `✅ ${newTours.length} Tour${newTours.length > 1 ? "en" : ""} von gestern (${yesterday}) für heute übernommen.`;
+        } else {
+          replyMessage += `❌ Fehler beim Kopieren der Touren: ${error.message}`;
+        }
       }
     } else if (parsed.action === "create_vehicle") {
       const plate = parsed.new_license_plate || parsed.license_plate;
