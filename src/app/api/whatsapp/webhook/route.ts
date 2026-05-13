@@ -64,35 +64,81 @@ export async function POST(request: NextRequest) {
     return new Response("OK", { status: 200 });
   }
 
-  // Copy yesterday's tours detection (regex, no GPT needed)
-  const copyYesterdayMatch = /(?:übernimm?|kopier|nehm?)\s+(?:alle\s+)?touren?\s+(?:von\s+)?gestern/i.test(transcript);
-  if (copyYesterdayMatch) {
-    const today = new Date().toISOString().split("T")[0];
-    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+  // Copy tours from a given date → today
+  const copyMatch = transcript.match(
+    /(?:übernimm?|kopier|nehm?)\s+(?:alle\s+)?touren?\s+(?:von(?:\s+letztem?n?)?\s+|vom\s+)(gestern|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|\d{1,2}\.\d{1,2}\.(?:\d{4})?)/i
+  );
+  if (copyMatch) {
+    const todayDate = new Date();
+    const today = todayDate.toISOString().split("T")[0];
+    const token = copyMatch[1].toLowerCase().trim();
 
-    const { data: yesterdayTours } = await supabase
+    // Resolve the token to a YYYY-MM-DD string
+    let sourceDate = "";
+    if (token === "gestern") {
+      sourceDate = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+    } else if (/^\d{1,2}\.\d{1,2}\./.test(token)) {
+      // DD.MM. or DD.MM.YYYY
+      const parts = token.split(".");
+      const day   = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year  = parts[2] ? parseInt(parts[2], 10) : todayDate.getFullYear();
+      const d = new Date(year, month, day);
+      sourceDate = d.toISOString().split("T")[0];
+    } else {
+      // Weekday → most recent past occurrence
+      const weekdays: Record<string, number> = { sonntag:0, montag:1, dienstag:2, mittwoch:3, donnerstag:4, freitag:5, samstag:6 };
+      const targetDay = weekdays[token];
+      if (targetDay !== undefined) {
+        const d = new Date(todayDate);
+        d.setDate(d.getDate() - ((d.getDay() - targetDay + 7) % 7 || 7));
+        sourceDate = d.toISOString().split("T")[0];
+      }
+    }
+
+    if (!sourceDate) {
+      await sendReply(from, `❓ Datum nicht erkannt. Beispiele:\n• "Übernimm Touren von gestern"\n• "Übernimm Touren vom Freitag"\n• "Übernimm Touren vom 09.05."`);
+      return new Response("OK", { status: 200 });
+    }
+
+    const { data: sourceTours, error: fetchError } = await supabase
       .from("tours")
       .select("driver_id, vehicle_id, customer_id, pickup_address, delivery_address, notes")
-      .eq("tour_date", yesterday)
+      .eq("tour_date", sourceDate)
       .neq("status", "cancelled");
 
-    if (!yesterdayTours || yesterdayTours.length === 0) {
-      await sendReply(from, `⚠️ Keine Touren von gestern (${yesterday}) gefunden.`);
+    if (fetchError) {
+      await sendReply(from, `❌ Datenbankfehler: ${fetchError.message}`);
+      return new Response("OK", { status: 200 });
+    }
+
+    if (!sourceTours || sourceTours.length === 0) {
+      // Format date nicely for display
+      const [y, m, d] = sourceDate.split("-");
+      await sendReply(from, `⚠️ Keine Touren für ${d}.${m}.${y} gefunden — vielleicht war das ein freier Tag?`);
+      return new Response("OK", { status: 200 });
+    }
+
+    const newTours = sourceTours.map((t) => ({
+      ...t,
+      tour_date: today,
+      status: "planned",
+      rollkarte_status: "pending",
+      notes: t.notes ? `${t.notes} | Kopie von ${sourceDate}` : `Kopie von ${sourceDate}`,
+    }));
+
+    const { error: insertError } = await supabase.from("tours").insert(newTours);
+
+    const [sy, sm, sd] = sourceDate.split("-");
+    const [ty, tm, td] = today.split("-");
+
+    if (!insertError) {
+      await supabase.from("whatsapp_logs").insert({ sender_number: from, transcript, parsed_action: { action: "copy_tours", sourceDate, today }, success: true });
+      await sendReply(from,
+        `✅ ${newTours.length} Tour${newTours.length !== 1 ? "en" : ""} vom ${sd}.${sm}.${sy} für heute (${td}.${tm}.${ty}) übernommen.\n\nBitte im Portal unter Touren prüfen.`
+      );
     } else {
-      const newTours = yesterdayTours.map((t) => ({
-        ...t,
-        tour_date: today,
-        status: "planned",
-        rollkarte_status: "pending",
-        notes: t.notes ? `${t.notes} | Kopie von ${yesterday}` : `Kopie von ${yesterday}`,
-      }));
-      const { error } = await supabase.from("tours").insert(newTours);
-      if (!error) {
-        await supabase.from("whatsapp_logs").insert({ sender_number: from, transcript, parsed_action: { action: "copy_yesterday_tours" }, success: true });
-        await sendReply(from, `✅ ${newTours.length} Tour${newTours.length > 1 ? "en" : ""} von gestern (${yesterday}) für heute (${today}) übernommen.`);
-      } else {
-        await sendReply(from, `❌ Fehler beim Kopieren: ${error.message}`);
-      }
+      await sendReply(from, `❌ Fehler beim Kopieren der Touren: ${insertError.message}`);
     }
     return new Response("OK", { status: 200 });
   }
