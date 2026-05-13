@@ -75,8 +75,8 @@ export async function POST(request: NextRequest) {
     return new Response("OK", { status: 200 });
   }
 
-  // Copy tours: "Übernimm Touren von [source] [für [target]]"
-  const copyMatch = /(?:übernimm?|kopier|nehm?)\s+(?:alle\s+)?touren?\s+/i.test(transcript);
+  // Copy tours: "Übernimm [die/alle] Touren von [source] [für [target]]"
+  const copyMatch = /(?:übernimm?|kopier|nehm?)\s+(?:(?:alle|die|meine|seine|ihre)\s+)?touren?\s+/i.test(transcript);
   if (copyMatch) {
     const nowDate = new Date();
 
@@ -92,11 +92,29 @@ export async function POST(request: NextRequest) {
     };
 
     function resolveDate(token: string, preferFuture = false): string {
-      const t = token.toLowerCase().replace(/\.$/, "").trim();
+      // Strip leading weekday + optional comma: "Montag, den ..." → "den ..."
+      let t = token.toLowerCase().replace(/\.$/, "").trim();
+      t = t.replace(/^(?:montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag),?\s*/i, "");
+      // Strip leading "den "
+      t = t.replace(/^den\s+/, "");
+
       if (t === "heute")        return nowDate.toISOString().split("T")[0];
       if (t === "gestern")      return new Date(Date.now() - 86400000).toISOString().split("T")[0];
       if (t === "morgen")       return new Date(Date.now() + 86400000).toISOString().split("T")[0];
       if (t === "übermorgen")   return new Date(Date.now() + 2*86400000).toISOString().split("T")[0];
+
+      // Weekday only (after stripping prefix above)
+      if (weekdays[t] !== undefined) {
+        const targetDay = weekdays[t];
+        const d = new Date(nowDate);
+        const diff = (targetDay - d.getDay() + 7) % 7;
+        if (preferFuture) {
+          d.setDate(d.getDate() + (diff === 0 ? 7 : diff));
+        } else {
+          d.setDate(d.getDate() - ((d.getDay() - targetDay + 7) % 7 || 7));
+        }
+        return d.toISOString().split("T")[0];
+      }
 
       // "18. mai 2026" or "18 mai 2026" or "18. mai"
       const longMatch = t.match(/(\d{1,2})\.?\s+([a-zäöü]+)\s*(\d{4})?/);
@@ -116,18 +134,6 @@ export async function POST(request: NextRequest) {
         return new Date(year, mon, day).toISOString().split("T")[0];
       }
 
-      // Weekday
-      if (weekdays[t] !== undefined) {
-        const targetDay = weekdays[t];
-        const d = new Date(nowDate);
-        const diff = (targetDay - d.getDay() + 7) % 7;
-        if (preferFuture) {
-          d.setDate(d.getDate() + (diff === 0 ? 7 : diff));
-        } else {
-          d.setDate(d.getDate() - ((d.getDay() - targetDay + 7) % 7 || 7));
-        }
-        return d.toISOString().split("T")[0];
-      }
       return "";
     }
 
