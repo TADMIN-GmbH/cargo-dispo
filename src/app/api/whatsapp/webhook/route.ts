@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import twilio from "twilio";
 import OpenAI from "openai";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   const mediaType = params["MediaContentType0"] ?? "";
   const bodyText = params["Body"] ?? "";
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   let transcript = bodyText;
 
   if (mediaUrl && mediaType.startsWith("audio/")) {
