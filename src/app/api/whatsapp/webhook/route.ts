@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
     const [ty, tm, td] = targetDate.split("-");
 
     if (!insertError) {
-      await supabase.from("whatsapp_logs").insert({ sender_number: from, transcript, parsed_action: { action: "copy_tours", sourceDate, today }, success: true });
+      await supabase.from("whatsapp_logs").insert({ sender_number: from, transcript, parsed_action: { action: "copy_tours", sourceDate, targetDate }, success: true });
       await sendReply(from,
         `✅ ${newTours.length} Tour${newTours.length !== 1 ? "en" : ""} vom ${sd}.${sm}.${sy} für heute (${td}.${tm}.${ty}) übernommen.\n\nBitte im Portal unter Touren prüfen.`
       );
