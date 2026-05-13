@@ -1,9 +1,19 @@
 import { NextRequest } from "next/server";
 import twilio from "twilio";
 import OpenAI from "openai";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createServerClient } from "@supabase/ssr";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
+function makeSupabase() {
+  // Use service role key if available (bypasses RLS), fall back to anon key
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    key,
+    { cookies: { getAll: () => [], setAll: () => {} } }
+  );
+}
 
 export async function POST(request: NextRequest) {
   const formData = await request.formData();
@@ -29,7 +39,7 @@ export async function POST(request: NextRequest) {
   const mediaType = params["MediaContentType0"] ?? "";
   const bodyText = params["Body"] ?? "";
 
-  const supabase = createAdminClient();
+  const supabase = makeSupabase();
 
   let transcript = bodyText;
 
