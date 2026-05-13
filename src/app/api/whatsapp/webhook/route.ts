@@ -75,40 +75,84 @@ export async function POST(request: NextRequest) {
     return new Response("OK", { status: 200 });
   }
 
-  // Copy tours from a given date → today
-  const copyMatch = transcript.match(
-    /(?:übernimm?|kopier|nehm?)\s+(?:alle\s+)?touren?\s+(?:von(?:\s+letztem?n?)?\s+|vom\s+)(gestern|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag|\d{1,2}\.\d{1,2}\.(?:\d{4})?)/i
-  );
+  // Copy tours: "Übernimm Touren von [source] [für [target]]"
+  const copyMatch = /(?:übernimm?|kopier|nehm?)\s+(?:alle\s+)?touren?\s+/i.test(transcript);
   if (copyMatch) {
-    const todayDate = new Date();
-    const today = todayDate.toISOString().split("T")[0];
-    const token = copyMatch[1].toLowerCase().trim();
+    const nowDate = new Date();
 
-    // Resolve the token to a YYYY-MM-DD string
-    let sourceDate = "";
-    if (token === "gestern") {
-      sourceDate = new Date(Date.now() - 86400000).toISOString().split("T")[0];
-    } else if (/^\d{1,2}\.\d{1,2}\./.test(token)) {
-      // DD.MM. or DD.MM.YYYY
-      const parts = token.split(".");
-      const day   = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const year  = parts[2] ? parseInt(parts[2], 10) : todayDate.getFullYear();
-      const d = new Date(year, month, day);
-      sourceDate = d.toISOString().split("T")[0];
-    } else {
-      // Weekday → most recent past occurrence
-      const weekdays: Record<string, number> = { sonntag:0, montag:1, dienstag:2, mittwoch:3, donnerstag:4, freitag:5, samstag:6 };
-      const targetDay = weekdays[token];
-      if (targetDay !== undefined) {
-        const d = new Date(todayDate);
-        d.setDate(d.getDate() - ((d.getDay() - targetDay + 7) % 7 || 7));
-        sourceDate = d.toISOString().split("T")[0];
+    // Helper: parse a date token into YYYY-MM-DD
+    // Handles: heute, morgen, übermorgen, gestern, Wochentag, DD.MM., DD.MM.YYYY,
+    //          "den 18. Mai 2026", "18. Mai", "18.05.2026"
+    const monate: Record<string, number> = {
+      januar:0, februar:1, märz:2, april:3, mai:4, juni:5,
+      juli:6, august:7, september:8, oktober:9, november:10, dezember:11
+    };
+    const weekdays: Record<string, number> = {
+      sonntag:0, montag:1, dienstag:2, mittwoch:3, donnerstag:4, freitag:5, samstag:6
+    };
+
+    function resolveDate(token: string, preferFuture = false): string {
+      const t = token.toLowerCase().replace(/\.$/, "").trim();
+      if (t === "heute")        return nowDate.toISOString().split("T")[0];
+      if (t === "gestern")      return new Date(Date.now() - 86400000).toISOString().split("T")[0];
+      if (t === "morgen")       return new Date(Date.now() + 86400000).toISOString().split("T")[0];
+      if (t === "übermorgen")   return new Date(Date.now() + 2*86400000).toISOString().split("T")[0];
+
+      // "18. mai 2026" or "18 mai 2026" or "18. mai"
+      const longMatch = t.match(/(\d{1,2})\.?\s+([a-zäöü]+)\s*(\d{4})?/);
+      if (longMatch) {
+        const day = parseInt(longMatch[1], 10);
+        const mon = monate[longMatch[2]];
+        const year = longMatch[3] ? parseInt(longMatch[3], 10) : nowDate.getFullYear();
+        if (mon !== undefined) return new Date(year, mon, day).toISOString().split("T")[0];
       }
+
+      // DD.MM. or DD.MM.YYYY
+      const numMatch = t.match(/^(\d{1,2})\.(\d{1,2})\.?(\d{4})?$/);
+      if (numMatch) {
+        const day = parseInt(numMatch[1], 10);
+        const mon = parseInt(numMatch[2], 10) - 1;
+        const year = numMatch[3] ? parseInt(numMatch[3], 10) : nowDate.getFullYear();
+        return new Date(year, mon, day).toISOString().split("T")[0];
+      }
+
+      // Weekday
+      if (weekdays[t] !== undefined) {
+        const targetDay = weekdays[t];
+        const d = new Date(nowDate);
+        const diff = (targetDay - d.getDay() + 7) % 7;
+        if (preferFuture) {
+          d.setDate(d.getDate() + (diff === 0 ? 7 : diff));
+        } else {
+          d.setDate(d.getDate() - ((d.getDay() - targetDay + 7) % 7 || 7));
+        }
+        return d.toISOString().split("T")[0];
+      }
+      return "";
+    }
+
+    // Extract source and optional target from the full transcript
+    // Pattern: "... touren von/vom [source] [für [target]]"
+    const fullMatch = transcript.match(
+      /touren?\s+(?:von(?:\s+letztem?n?)?\s+|vom\s+)(.+?)(?:\s+für\s+(?:den\s+)?(.+))?$/i
+    );
+
+    let sourceDate = "";
+    let targetDate = nowDate.toISOString().split("T")[0]; // default target = today
+
+    if (fullMatch) {
+      sourceDate = resolveDate(fullMatch[1].trim(), false);
+      if (fullMatch[2]) targetDate = resolveDate(fullMatch[2].trim(), true);
     }
 
     if (!sourceDate) {
-      await sendReply(from, `❓ Datum nicht erkannt. Beispiele:\n• "Übernimm Touren von gestern"\n• "Übernimm Touren vom Freitag"\n• "Übernimm Touren vom 09.05."`);
+      await sendReply(from,
+        `❓ Datum nicht erkannt. Beispiele:\n` +
+        `• "Übernimm Touren von gestern"\n` +
+        `• "Übernimm Touren vom Freitag"\n` +
+        `• "Übernimm Touren von heute für Montag den 18. Mai 2026"\n` +
+        `• "Übernimm Touren vom 12.05. für den 18.05."`
+      );
       return new Response("OK", { status: 200 });
     }
 
@@ -124,15 +168,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!sourceTours || sourceTours.length === 0) {
-      // Format date nicely for display
-      const [y, m, d] = sourceDate.split("-");
-      await sendReply(from, `⚠️ Keine Touren für ${d}.${m}.${y} gefunden — vielleicht war das ein freier Tag?`);
+      const [sy, sm, sd] = sourceDate.split("-");
+      await sendReply(from, `⚠️ Keine Touren für ${sd}.${sm}.${sy} gefunden — vielleicht war das ein freier Tag?`);
       return new Response("OK", { status: 200 });
     }
 
     const newTours = sourceTours.map((t) => ({
       ...t,
-      tour_date: today,
+      tour_date: targetDate,
       status: "planned",
       rollkarte_status: "pending",
       notes: t.notes ? `${t.notes} | Kopie von ${sourceDate}` : `Kopie von ${sourceDate}`,
@@ -141,7 +184,7 @@ export async function POST(request: NextRequest) {
     const { error: insertError } = await supabase.from("tours").insert(newTours);
 
     const [sy, sm, sd] = sourceDate.split("-");
-    const [ty, tm, td] = today.split("-");
+    const [ty, tm, td] = targetDate.split("-");
 
     if (!insertError) {
       await supabase.from("whatsapp_logs").insert({ sender_number: from, transcript, parsed_action: { action: "copy_tours", sourceDate, today }, success: true });
