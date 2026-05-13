@@ -64,6 +64,39 @@ export async function POST(request: NextRequest) {
     return new Response("OK", { status: 200 });
   }
 
+  // Copy yesterday's tours detection (regex, no GPT needed)
+  const copyYesterdayMatch = /(?:übernimm?|kopier|nehm?)\s+(?:alle\s+)?touren?\s+(?:von\s+)?gestern/i.test(transcript);
+  if (copyYesterdayMatch) {
+    const today = new Date().toISOString().split("T")[0];
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+
+    const { data: yesterdayTours } = await supabase
+      .from("tours")
+      .select("driver_id, vehicle_id, customer_id, pickup_address, delivery_address, notes")
+      .eq("tour_date", yesterday)
+      .neq("status", "cancelled");
+
+    if (!yesterdayTours || yesterdayTours.length === 0) {
+      await sendReply(from, `⚠️ Keine Touren von gestern (${yesterday}) gefunden.`);
+    } else {
+      const newTours = yesterdayTours.map((t) => ({
+        ...t,
+        tour_date: today,
+        status: "planned",
+        rollkarte_status: "pending",
+        notes: t.notes ? `${t.notes} | Kopie von ${yesterday}` : `Kopie von ${yesterday}`,
+      }));
+      const { error } = await supabase.from("tours").insert(newTours);
+      if (!error) {
+        await supabase.from("whatsapp_logs").insert({ sender_number: from, transcript, parsed_action: { action: "copy_yesterday_tours" }, success: true });
+        await sendReply(from, `✅ ${newTours.length} Tour${newTours.length > 1 ? "en" : ""} von gestern (${yesterday}) für heute (${today}) übernommen.`);
+      } else {
+        await sendReply(from, `❌ Fehler beim Kopieren: ${error.message}`);
+      }
+    }
+    return new Response("OK", { status: 200 });
+  }
+
   // Rollkarte reply detection: "Rollkarte 12345" or just a number after a rollkarte request
   const rollkarteMatch = transcript.match(/^(?:rollkarte[:\s]+)?(\d{3,10})\s*$/i);
   if (rollkarteMatch) {
