@@ -1,16 +1,13 @@
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 
 // Service-role client — bypasses RLS. Only use server-side (webhooks, cron jobs).
+// Uses @supabase/ssr (same package as the rest of the app) to avoid localStorage issues.
 export function createAdminClient() {
-  return createClient(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-      },
+      cookies: { getAll: () => [], setAll: () => {} },
     }
   );
 }
