@@ -29,7 +29,21 @@ export async function POST(request: NextRequest) {
   const mediaType = params["MediaContentType0"] ?? "";
   const bodyText = params["Body"] ?? "";
 
-  const supabase = createAdminClient();
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("SUPABASE_SERVICE_ROLE_KEY is not set");
+    await sendReply(from, "❌ Konfigurationsfehler: Service-Key fehlt.");
+    return new Response("OK", { status: 200 });
+  }
+
+  let supabase: ReturnType<typeof createAdminClient>;
+  try {
+    supabase = createAdminClient();
+  } catch (err) {
+    console.error("Failed to create admin client:", err);
+    await sendReply(from, "❌ Interner Fehler (DB-Client).");
+    return new Response("OK", { status: 200 });
+  }
+
   let transcript = bodyText;
 
   if (mediaUrl && mediaType.startsWith("audio/")) {
