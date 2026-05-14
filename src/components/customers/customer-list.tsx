@@ -53,7 +53,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   const [locationForm, setLocationForm] = useState({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
   const [editingLocation, setEditingLocation] = useState<CustomerLocation | null>(null);
   const [pricingModels, setPricingModels] = useState<CustomerPricingModel[]>([]);
-  const emptyPricingForm = { vehicle_type: "", km_class: "", daily_rate_netto: "", maut_flat: "0", diesel_base_price: "1.04", diesel_factor: "20", valid_from: new Date().toISOString().slice(0, 10), notes: "" };
+  const emptyPricingForm = { vehicle_type: "", km_class: "", daily_rate_netto: "", maut_flat: "0", accessory_flat: "0", diesel_base_price: "1.04", diesel_factor: "20", diesel_source: "en2x", diesel_lag_months: "2", floater_type: "formula", valid_from: new Date().toISOString().slice(0, 10), notes: "" };
   const [pricingForm, setPricingForm] = useState(emptyPricingForm);
   const [savingPricing, setSavingPricing] = useState(false);
   const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "standorte" | "preismodell" | "preisformel">("stammdaten");
@@ -206,8 +206,12 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
         km_class: pricingForm.vehicle_type === "SZM" && pricingForm.km_class ? pricingForm.km_class : null,
         daily_rate_netto: parseFloat(pricingForm.daily_rate_netto),
         maut_flat: parseFloat(pricingForm.maut_flat) || 0,
+        accessory_flat: parseFloat(pricingForm.accessory_flat) || 0,
         diesel_base_price: parseFloat(pricingForm.diesel_base_price) || 1.04,
         diesel_factor: parseFloat(pricingForm.diesel_factor) || 20,
+        diesel_source: pricingForm.diesel_source,
+        diesel_lag_months: parseInt(pricingForm.diesel_lag_months) || 2,
+        floater_type: pricingForm.floater_type,
         valid_from: pricingForm.valid_from,
         notes: pricingForm.notes || null,
       }),
@@ -703,8 +707,8 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                     {pricingModels.length > 0 && (
                       <div className="space-y-2">
                         {pricingModels.map((m) => {
-                          const dieselPct = ((m.diesel_factor / 100) * ((1.7359 - m.diesel_base_price) / m.diesel_base_price) * 100).toFixed(1);
                           const label = m.vehicle_type === "SZM" && m.km_class ? `${m.vehicle_type} (${m.km_class})` : m.vehicle_type;
+                          const isBgl = m.diesel_source === "bgl";
                           return (
                             <div key={m.id} className="rounded-lg border border-gray-200 bg-white p-3">
                               <div className="flex items-start justify-between gap-2">
@@ -712,12 +716,24 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-sm font-semibold text-gray-800">{label}</span>
                                     <span className="text-xs bg-blue-100 text-blue-700 rounded px-1.5 py-0.5">ab {m.valid_from}</span>
+                                    <span className={`text-xs rounded px-1.5 py-0.5 ${isBgl ? "bg-orange-100 text-orange-700" : "bg-green-100 text-green-700"}`}>
+                                      {isBgl ? `BGL · ${m.diesel_lag_months}M` : `en2x · ${m.diesel_lag_months}M`}
+                                    </span>
                                   </div>
                                   <div className="mt-1 grid grid-cols-2 gap-x-4 text-xs text-gray-600">
                                     <span>Tagessatz: <strong>{m.daily_rate_netto.toFixed(2)} €</strong></span>
                                     <span>Maut: <strong>{m.maut_flat.toFixed(2)} €</strong></span>
-                                    <span>Diesel-Basis: <strong>{m.diesel_base_price.toFixed(4)} €</strong></span>
-                                    <span>Diesel-Faktor: <strong>{m.diesel_factor}%</strong></span>
+                                    {(m.accessory_flat ?? 0) > 0 && (
+                                      <span>Zubehör: <strong>{(m.accessory_flat ?? 0).toFixed(2)} €</strong></span>
+                                    )}
+                                    {isBgl ? (
+                                      <span>Floater: <strong>BGL Stufentabelle</strong></span>
+                                    ) : (
+                                      <>
+                                        <span>Diesel-Basis: <strong>{m.diesel_base_price.toFixed(4)} €</strong></span>
+                                        <span>Diesel-Faktor: <strong>{m.diesel_factor}%</strong></span>
+                                      </>
+                                    )}
                                   </div>
                                   {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
                                 </div>
@@ -767,6 +783,31 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                           <Input className="h-8 text-sm" type="date" value={pricingForm.valid_from} onChange={(e) => setPricingForm({ ...pricingForm, valid_from: e.target.value })} />
                         </div>
                       </div>
+                      {/* Diesel source + lag */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Diesel-Quelle</Label>
+                          <select
+                            value={pricingForm.diesel_source}
+                            onChange={(e) => setPricingForm({ ...pricingForm, diesel_source: e.target.value, floater_type: e.target.value === "bgl" ? "table" : "formula" })}
+                            className="h-8 text-sm border border-gray-300 rounded-md px-2 w-full bg-white"
+                          >
+                            <option value="en2x">en2x (Formel)</option>
+                            <option value="bgl">BGL (Stufentabelle)</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Zeitversatz (Monate)</Label>
+                          <select
+                            value={pricingForm.diesel_lag_months}
+                            onChange={(e) => setPricingForm({ ...pricingForm, diesel_lag_months: e.target.value })}
+                            className="h-8 text-sm border border-gray-300 rounded-md px-2 w-full bg-white"
+                          >
+                            <option value="1">1 Monat</option>
+                            <option value="2">2 Monate</option>
+                          </select>
+                        </div>
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
                           <Label className="text-xs">Tagessatz netto (€) *</Label>
@@ -774,16 +815,29 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                         </div>
                         <div className="space-y-1">
                           <Label className="text-xs">Maut-Pauschale (€/Tag)</Label>
-                          <Input className="h-8 text-sm" type="number" step="0.01" placeholder="72.59" value={pricingForm.maut_flat} onChange={(e) => setPricingForm({ ...pricingForm, maut_flat: e.target.value })} />
+                          <Input className="h-8 text-sm" type="number" step="0.01" placeholder="0.00" value={pricingForm.maut_flat} onChange={(e) => setPricingForm({ ...pricingForm, maut_flat: e.target.value })} />
                         </div>
                         <div className="space-y-1">
-                          <Label className="text-xs">Diesel-Basis (€/l netto)</Label>
-                          <Input className="h-8 text-sm" type="number" step="0.0001" placeholder="1.04" value={pricingForm.diesel_base_price} onChange={(e) => setPricingForm({ ...pricingForm, diesel_base_price: e.target.value })} />
+                          <Label className="text-xs">Zubehör-Pauschale (€/Tag)</Label>
+                          <Input className="h-8 text-sm" type="number" step="0.01" placeholder="0.00" value={pricingForm.accessory_flat} onChange={(e) => setPricingForm({ ...pricingForm, accessory_flat: e.target.value })} />
                         </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Diesel-Faktor (%)</Label>
-                          <Input className="h-8 text-sm" type="number" step="1" placeholder="20" value={pricingForm.diesel_factor} onChange={(e) => setPricingForm({ ...pricingForm, diesel_factor: e.target.value })} />
-                        </div>
+                        {pricingForm.diesel_source === "en2x" && (
+                          <>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Diesel-Basis (€/l netto)</Label>
+                              <Input className="h-8 text-sm" type="number" step="0.0001" placeholder="1.04" value={pricingForm.diesel_base_price} onChange={(e) => setPricingForm({ ...pricingForm, diesel_base_price: e.target.value })} />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Diesel-Faktor (%)</Label>
+                              <Input className="h-8 text-sm" type="number" step="1" placeholder="20" value={pricingForm.diesel_factor} onChange={(e) => setPricingForm({ ...pricingForm, diesel_factor: e.target.value })} />
+                            </div>
+                          </>
+                        )}
+                        {pricingForm.diesel_source === "bgl" && (
+                          <div className="col-span-2 rounded-md bg-orange-50 border border-orange-200 p-2 text-xs text-orange-700">
+                            BGL Stufentabelle: Zuschlag wird automatisch anhand des BGL-Preises für den Referenzmonat ermittelt.
+                          </div>
+                        )}
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Notizen</Label>
@@ -793,21 +847,32 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                       {/* Live preview */}
                       {pricingForm.daily_rate_netto && (
                         <div className="rounded-md bg-blue-50 border border-blue-200 p-2.5 text-xs text-blue-700">
-                          <p className="font-semibold mb-1">Vorschau (bei akt. Diesel 1,7359 €/l brutto)</p>
+                          <p className="font-semibold mb-1">
+                            {pricingForm.diesel_source === "bgl"
+                              ? "Vorschau (BGL März 2026: 172,25 €/100L → +18,5%)"
+                              : "Vorschau (en2x Feb 2026: 1,7359 €/l brutto)"}
+                          </p>
                           {(() => {
                             const rate = parseFloat(pricingForm.daily_rate_netto) || 0;
                             const maut = parseFloat(pricingForm.maut_flat) || 0;
-                            const base = parseFloat(pricingForm.diesel_base_price) || 1.04;
-                            const factor = parseFloat(pricingForm.diesel_factor) || 20;
-                            const currentDieselBrutto = 1.7359;
-                            const dieselPct = (currentDieselBrutto / 1.19 - base) / base * 100 * factor / 100;
+                            const accessory = parseFloat(pricingForm.accessory_flat) || 0;
+                            let dieselPct = 0;
+                            if (pricingForm.diesel_source === "bgl") {
+                              dieselPct = 18.5; // März 2026 band
+                            } else {
+                              const base = parseFloat(pricingForm.diesel_base_price) || 1.04;
+                              const factor = parseFloat(pricingForm.diesel_factor) || 20;
+                              const currentDieselBrutto = 1.7359;
+                              dieselPct = (currentDieselBrutto / 1.19 - base) / base * 100 * factor / 100;
+                            }
                             const dieselAmt = rate * dieselPct / 100;
-                            const total = rate + maut + dieselAmt;
+                            const total = rate + maut + accessory + dieselAmt;
                             return (
                               <div className="space-y-0.5">
                                 <div className="flex justify-between"><span>Tagessatz</span><span className="font-mono">{rate.toFixed(2)} €</span></div>
                                 <div className="flex justify-between"><span>Diesel-Zuschlag ({dieselPct.toFixed(2)} %)</span><span className="font-mono">+ {dieselAmt.toFixed(2)} €</span></div>
-                                <div className="flex justify-between"><span>Maut</span><span className="font-mono">+ {maut.toFixed(2)} €</span></div>
+                                {maut > 0 && <div className="flex justify-between"><span>Maut</span><span className="font-mono">+ {maut.toFixed(2)} €</span></div>}
+                                {accessory > 0 && <div className="flex justify-between"><span>Zubehör</span><span className="font-mono">+ {accessory.toFixed(2)} €</span></div>}
                                 <div className="flex justify-between border-t border-blue-300 pt-1 font-bold"><span>Gesamt/Tag</span><span className="font-mono">{total.toFixed(2)} €</span></div>
                               </div>
                             );

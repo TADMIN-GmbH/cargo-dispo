@@ -17,12 +17,6 @@ function normalizeCompany(s: string) {
     .replace(/gmbh|cokg|co\.kg|gmbh&co|&co/g, "");
 }
 
-/** Returns "YYYY-MM-01" for the diesel reference month (2-month lag). */
-function dieselRefMonth(tourDate: string): string {
-  const d = new Date(tourDate);
-  d.setMonth(d.getMonth() - 2);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
 
 export async function POST(
   _req: NextRequest,
@@ -59,13 +53,35 @@ export async function POST(
     (c) => normalizeCompany(c.company_name) === normalizedAbsender
   );
 
-  // Load all diesel prices once (for the 2-month lag lookup)
+  // Load en2x diesel prices (price_brutto, 2-month lag by default)
   const { data: allDieselPrices } = await supabase
     .from("diesel_prices")
     .select("month, price_brutto");
-  const dieselMap = new Map<string, number>(
+  const en2xMap = new Map<string, number>(
     (allDieselPrices ?? []).map((d) => [d.month, d.price_brutto])
   );
+
+  // Load BGL diesel prices (price_netto per 100L, 1-month lag by default)
+  const { data: allBglPrices } = await supabase
+    .from("bgl_diesel_prices")
+    .select("month, price_netto");
+  const bglMap = new Map<string, number>(
+    (allBglPrices ?? []).map((d) => [d.month, d.price_netto])
+  );
+
+  // Load BGL floater step table
+  const { data: bglSteps } = await supabase
+    .from("bgl_floater_steps")
+    .select("price_from, price_to, surcharge_pct")
+    .order("price_from");
+  const bglFloaterSteps: { price_from: number; price_to: number; surcharge_pct: number }[] =
+    bglSteps ?? [];
+
+  /** Look up BGL floater surcharge % for a given price (€/100L netto). */
+  function bglSurchargePct(price: number): number | null {
+    const step = bglFloaterSteps.find((s) => price >= s.price_from && price <= s.price_to);
+    return step ? step.surcharge_pct : null;
+  }
 
   // Load all pricing models for this customer (if known)
   let allPricingModels: {
@@ -73,17 +89,36 @@ export async function POST(
     km_class: string | null;
     daily_rate_netto: number;
     maut_flat: number;
+    accessory_flat: number;
     diesel_base_price: number;
     diesel_factor: number;
+    diesel_source: string;
+    diesel_lag_months: number;
+    floater_type: string;
     valid_from: string;
   }[] = [];
   if (customer) {
     const { data: pm } = await supabase
       .from("customer_pricing_models")
-      .select("vehicle_type, km_class, daily_rate_netto, maut_flat, diesel_base_price, diesel_factor, valid_from")
+      .select(
+        "vehicle_type, km_class, daily_rate_netto, maut_flat, accessory_flat, diesel_base_price, diesel_factor, diesel_source, diesel_lag_months, floater_type, valid_from"
+      )
       .eq("customer_id", customer.id)
       .order("valid_from", { ascending: false });
-    allPricingModels = pm ?? [];
+    allPricingModels = (pm ?? []).map((m) => ({
+      ...m,
+      accessory_flat: m.accessory_flat ?? 0,
+      diesel_source: m.diesel_source ?? "en2x",
+      diesel_lag_months: m.diesel_lag_months ?? 2,
+      floater_type: m.floater_type ?? "formula",
+    }));
+  }
+
+  /** Returns "YYYY-MM-01" offset by lagMonths back from tourDate. */
+  function refMonth(tourDate: string, lagMonths: number): string {
+    const d = new Date(tourDate);
+    d.setMonth(d.getMonth() - lagMonths);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
   }
 
   /**
@@ -101,9 +136,9 @@ export async function POST(
 
   /**
    * Compute soll_netto for a single tour day.
-   * Formula: daily_rate + maut_flat + diesel_surcharge
-   * diesel_surcharge = daily_rate * (diesel_netto - base) / base * (factor/100)
-   * Returns null if no pricing model or no diesel price.
+   *
+   * en2x / formula:  daily_rate × (1 + (brutto/1.19 − base) / base × factor/100) + maut + accessory
+   * bgl  / table:    daily_rate × (1 + surcharge_pct/100) + maut + accessory
    */
   function computeSollNetto(
     vehicleType: string,
@@ -113,16 +148,30 @@ export async function POST(
     const pm = getActivePricingModel(vehicleType, kmClass, tourDate);
     if (!pm) return null;
 
-    const refMonth = dieselRefMonth(tourDate);
-    const dieselNetto = dieselMap.get(refMonth);
-    if (dieselNetto === undefined) return null;
+    const lag = pm.diesel_lag_months ?? 2;
+    const ref = refMonth(tourDate, lag);
 
-    // Formula: (en2x_brutto / 1.19 - base_netto) / base_netto * factor
-    // diesel_base_price is stored as netto (1.04), diesel map contains brutto values
-    const dieselSurchargePct =
-      ((dieselNetto / 1.19 - pm.diesel_base_price) / pm.diesel_base_price) * pm.diesel_factor;
+    let dieselSurchargePct: number;
+
+    if (pm.floater_type === "table") {
+      // BGL step-table lookup
+      const bglPrice = bglMap.get(ref);
+      if (bglPrice === undefined) return null;
+      const pct = bglSurchargePct(bglPrice);
+      if (pct === null) return null;
+      dieselSurchargePct = pct;
+    } else {
+      // en2x continuous formula
+      const en2xBrutto = en2xMap.get(ref);
+      if (en2xBrutto === undefined) return null;
+      dieselSurchargePct =
+        ((en2xBrutto / 1.19 - pm.diesel_base_price) / pm.diesel_base_price) * pm.diesel_factor;
+    }
+
     const dieselAmt = pm.daily_rate_netto * (dieselSurchargePct / 100);
-    return Math.round((pm.daily_rate_netto + pm.maut_flat + dieselAmt) * 100) / 100;
+    return Math.round(
+      (pm.daily_rate_netto + pm.maut_flat + pm.accessory_flat + dieselAmt) * 100
+    ) / 100;
   }
 
   const results = [];

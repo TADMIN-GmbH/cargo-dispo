@@ -120,6 +120,7 @@ export interface Tour {
   rollkarte_source?: "whatsapp" | "manual";
   rollkarte_updated_by?: string;
   billing_ref?: string;
+  soll_netto?: number;
   customer_location_id?: string;
   customer_location?: CustomerLocation;
   created_by?: string;
@@ -185,12 +186,16 @@ export interface DieselPrice {
 export interface CustomerPricingModel {
   id: string;
   customer_id: string;
-  vehicle_type: string;   // "MW 12t" | "MW 15t" | "MW 18t" | "MW 26t" | "SZM"
-  km_class?: string;      // null | "300km" | "450km"
+  vehicle_type: string;     // "MW 12t" | "MW 15t" | "MW 18t" | "MW 26t" | "SZM"
+  km_class?: string;        // null | "300km" | "450km"
   daily_rate_netto: number;
   maut_flat: number;
+  accessory_flat: number;   // flat add-on per day, NOT subject to diesel surcharge (e.g. trailer)
   diesel_base_price: number;
-  diesel_factor: number;  // e.g. 20 (= 20%)
+  diesel_factor: number;    // e.g. 20 (= 20%)
+  diesel_source: string;    // "en2x" | "bgl"
+  diesel_lag_months: number; // 1 or 2
+  floater_type: string;     // "formula" | "table"
   valid_from: string;
   notes?: string;
   created_at: string;

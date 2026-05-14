@@ -39,8 +39,12 @@ export async function POST(
       km_class: body.km_class ?? null,
       daily_rate_netto: body.daily_rate_netto,
       maut_flat: body.maut_flat ?? 0,
+      accessory_flat: body.accessory_flat ?? 0,
       diesel_base_price: body.diesel_base_price ?? 1.04,
       diesel_factor: body.diesel_factor ?? 20,
+      diesel_source: body.diesel_source ?? "en2x",
+      diesel_lag_months: body.diesel_lag_months ?? 2,
+      floater_type: body.floater_type ?? "formula",
       valid_from: body.valid_from,
       notes: body.notes ?? null,
     })

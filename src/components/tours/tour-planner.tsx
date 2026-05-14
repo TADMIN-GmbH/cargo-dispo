@@ -259,13 +259,14 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Rollkarte</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">GU/RE-Nr.</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Soll/Tag</th>
                   <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Aktionen</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-gray-400">
+                    <td colSpan={9} className="text-center py-12 text-gray-400">
                       <MapPin className="w-8 h-8 mx-auto mb-2 opacity-40" />
                       <p className="text-sm">Keine Touren gefunden</p>
                     </td>
@@ -318,6 +319,11 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
                         </td>
                         <td className="px-6 py-4 text-sm font-mono text-gray-600 whitespace-nowrap">
                           {t.billing_ref || <span className="text-gray-300">–</span>}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm whitespace-nowrap">
+                          {t.soll_netto != null
+                            ? <span className="font-mono font-semibold text-emerald-700">{t.soll_netto.toFixed(2)} €</span>
+                            : <span className="text-gray-300">–</span>}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
