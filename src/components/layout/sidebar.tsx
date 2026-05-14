@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Receipt,
   Route,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -33,6 +34,7 @@ const navItems = [
   { href: "/whatsapp", icon: MessageSquare, label: "WhatsApp" },
   { href: "/gutschriften", icon: Receipt, label: "Gutschriften" },
   { href: "/km-auswertung", icon: Route, label: "KM-Auswertung" },
+  { href: "/reparaturen", icon: Wrench, label: "Reparaturen" },
 ];
 
 const adminItems = [
