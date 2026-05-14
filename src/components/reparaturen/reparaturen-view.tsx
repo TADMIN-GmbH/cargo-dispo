@@ -318,11 +318,14 @@ function InvoiceCard({ invoice }: { invoice: RepairInvoice }) {
   );
 }
 
+type FileStatus = "pending" | "uploading" | "done" | "error";
+type FileEntry = { file: File; status: FileStatus; error?: string };
+
 export function ReparaturenView({ invoices }: ReparaturenViewProps) {
-  const [uploading, setUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [queue, setQueue] = useState<FileEntry[]>([]);
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const processingRef = useRef(false);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -341,46 +344,65 @@ export function ReparaturenView({ invoices }: ReparaturenViewProps) {
     });
   }, [invoices, search, statusFilter]);
 
-  const uploadFile = useCallback(async (file: File) => {
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      setUploadStatus({ type: "error", message: "Nur PDF-Dateien werden unterstützt." });
-      return;
-    }
-    setUploading(true);
-    setUploadStatus(null);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch("/api/repair-invoices/upload", { method: "POST", body: formData });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        setUploadStatus({ type: "error", message: data.error ?? "Upload fehlgeschlagen." });
-      } else {
-        setUploadStatus({ type: "success", message: "Rechnung erfolgreich verarbeitet und gespeichert." });
-        setTimeout(() => window.location.reload(), 1800);
+  const processQueue = useCallback(async (entries: FileEntry[]) => {
+    if (processingRef.current) return;
+    processingRef.current = true;
+    for (let i = 0; i < entries.length; i++) {
+      if (entries[i].status !== "pending") continue;
+      setQueue((q) => q.map((e, idx) => idx === i ? { ...e, status: "uploading" } : e));
+      const file = entries[i].file;
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/repair-invoices/upload", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          setQueue((q) => q.map((e, idx) => idx === i ? { ...e, status: "error", error: data.error ?? "Fehler" } : e));
+        } else {
+          setQueue((q) => q.map((e, idx) => idx === i ? { ...e, status: "done" } : e));
+        }
+      } catch (err: unknown) {
+        setQueue((q) => q.map((e, idx) => idx === i ? { ...e, status: "error", error: err instanceof Error ? err.message : "Fehler" } : e));
       }
-    } catch (err: unknown) {
-      setUploadStatus({
-        type: "error",
-        message: err instanceof Error ? err.message : "Unbekannter Fehler",
-      });
-    } finally {
-      setUploading(false);
     }
+    processingRef.current = false;
+    // Reload once all done
+    setQueue((q) => {
+      if (q.every((e) => e.status === "done" || e.status === "error")) {
+        setTimeout(() => window.location.reload(), 1200);
+      }
+      return q;
+    });
   }, []);
 
+  function addFiles(files: FileList | File[]) {
+    const pdfs = Array.from(files).filter((f) => f.name.toLowerCase().endsWith(".pdf"));
+    if (pdfs.length === 0) return;
+    const entries: FileEntry[] = pdfs.map((f) => ({ file: f, status: "pending" }));
+    setQueue((q) => {
+      const next = [...q, ...entries];
+      // start processing after state update
+      setTimeout(() => processQueue(next), 0);
+      return next;
+    });
+  }
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) uploadFile(file);
+    if (e.target.files) addFiles(e.target.files);
     e.target.value = "";
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) uploadFile(file);
+    if (e.dataTransfer.files) addFiles(e.dataTransfer.files);
   }
+
+  const doneCount = queue.filter((e) => e.status === "done").length;
+  const errorCount = queue.filter((e) => e.status === "error").length;
+  const uploadingNow = queue.find((e) => e.status === "uploading");
+  const pendingCount = queue.filter((e) => e.status === "pending").length;
+  const isRunning = queue.length > 0 && queue.some((e) => e.status === "pending" || e.status === "uploading");
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: invoices.length, ok: 0, warning: 0, alert: 0, pending: 0 };
@@ -409,7 +431,7 @@ export function ReparaturenView({ invoices }: ReparaturenViewProps) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
             <Upload className="w-4 h-4" />
-            Rechnung hochladen
+            Rechnungen hochladen
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -417,45 +439,55 @@ export function ReparaturenView({ invoices }: ReparaturenViewProps) {
             className={cn(
               "border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors",
               dragging ? "border-blue-500 bg-blue-50" : "border-gray-300 hover:border-blue-400 hover:bg-gray-50",
-              uploading && "pointer-events-none opacity-70"
             )}
-            onClick={() => !uploading && inputRef.current?.click()}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragging(true);
-            }}
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
           >
-            <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
-            {uploading ? (
-              <div className="flex flex-col items-center gap-3">
-                <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-                <p className="text-sm text-gray-600 font-medium">KI analysiert Rechnung…</p>
-                <p className="text-xs text-gray-400">Das kann 15–30 Sekunden dauern</p>
+            <input ref={inputRef} type="file" accept="application/pdf" multiple className="hidden" onChange={handleFileChange} />
+            <div className="flex flex-col items-center gap-3">
+              <Upload className="w-8 h-8 text-gray-400" />
+              <div>
+                <p className="text-sm font-medium text-gray-700">
+                  PDFs hierher ziehen oder klicken zum Auswählen
+                </p>
+                <p className="text-xs text-gray-400 mt-1">Mehrere Dateien gleichzeitig möglich · Nur PDF · max. 20 MB pro Datei</p>
               </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <Upload className="w-8 h-8 text-gray-400" />
-                <div>
-                  <p className="text-sm font-medium text-gray-700">
-                    PDF hierher ziehen oder klicken zum Auswählen
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">Nur PDF-Dateien, max. 20 MB</p>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
-          {uploadStatus && (
-            <div
-              className={cn(
-                "mt-3 px-4 py-3 rounded-lg text-sm font-medium",
-                uploadStatus.type === "success"
-                  ? "bg-green-50 text-green-800 border border-green-200"
-                  : "bg-red-50 text-red-800 border border-red-200"
+
+          {/* Progress */}
+          {queue.length > 0 && (
+            <div className="mt-4 space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-gray-700">
+                  {isRunning
+                    ? `Verarbeite ${uploadingNow?.file.name ?? "…"} (${doneCount + errorCount + 1} / ${queue.length})`
+                    : `Fertig — ${doneCount} erfolgreich${errorCount > 0 ? `, ${errorCount} Fehler` : ""}`}
+                </span>
+                {isRunning && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+              </div>
+              {/* Progress bar */}
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-500 h-2 rounded-full transition-all"
+                  style={{ width: `${((doneCount + errorCount) / queue.length) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-gray-400">
+                {doneCount} ✓ · {pendingCount} ausstehend{errorCount > 0 ? ` · ${errorCount} Fehler` : ""}
+              </p>
+              {/* Error list */}
+              {errorCount > 0 && (
+                <div className="mt-2 space-y-1">
+                  {queue.filter((e) => e.status === "error").map((e, i) => (
+                    <div key={i} className="text-xs text-red-700 bg-red-50 px-3 py-1.5 rounded">
+                      {e.file.name}: {e.error}
+                    </div>
+                  ))}
+                </div>
               )}
-            >
-              {uploadStatus.message}
             </div>
           )}
         </CardContent>
