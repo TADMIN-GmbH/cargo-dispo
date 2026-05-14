@@ -167,6 +167,17 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (driver) {
+    // Compute affirmative/negative at driver level so they're available
+    // in ALL branches below — including the outer fallback after driverTours check.
+    // NOTE: emoji above U+FFFF need the `u` flag — separate regex for safety.
+    // "ok" intentionally excluded: WhatsApp auto-replies send "OK" automatically
+    // after every incoming message, which would falsely confirm rollkarte numbers.
+    const trimmedMsg = transcript.trim();
+    const isAffirmative =
+      /^(ja\b|yes\b|richtig|korrekt|stimmt|genau|jo\b|yep|jep|passt|super|alles\s*klar)/i.test(trimmedMsg) ||
+      /^[\u{1F44D}\u{2705}\u{2713}\u{1F64C}\u{1F44C}]/u.test(trimmedMsg); // 👍 ✅ ✓ 🙌 👌
+    const isNegative = /^(nein\b|no\b|falsch|nö\b|nicht\b|wrong)/i.test(trimmedMsg);
+
     const { data: driverTours } = await supabase
       .from("tours")
       .select(
@@ -177,14 +188,6 @@ export async function POST(request: NextRequest) {
       .in("rollkarte_status", ["pending", "requested", "confirming"]);
 
     if (driverTours && driverTours.length > 0) {
-      // Affirmative / negative helpers (used in multiple branches)
-      // NOTE: emoji (>U+FFFF) require the `u` flag — keep them in a separate regex
-      const trimmedMsg = transcript.trim();
-      const isAffirmative =
-        /^(ja\b|yes\b|richtig|korrekt|stimmt|ok\b|genau|jo\b|yep|jep|passt|super|alles\s*klar)/i.test(trimmedMsg) ||
-        /^[\u{1F44D}\u{2705}\u{2713}\u{1F64C}\u{1F44C}]/u.test(trimmedMsg); // 👍 ✅ ✓ 🙌 👌 (all skin-tones covered via base code point)
-      const isNegative = /^(nein\b|no\b|falsch|nö\b|nicht\b|wrong)/i.test(trimmedMsg);
-
       // --- Handle confirmation flow ---
       const confirmingTour = driverTours.find((t: any) => t.rollkarte_status === "confirming");
       if (confirmingTour) {
@@ -237,26 +240,6 @@ export async function POST(request: NextRequest) {
         return new Response("OK", { status: 200 });
       }
 
-      // --- Fallback: affirmative but no confirming tour found ---
-      // This happens when Twilio retries the webhook and the state was already
-      // moved to "received" before this message arrived.
-      if (isAffirmative) {
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-        const { data: recentlyReceived } = await supabase
-          .from("tours")
-          .select("id")
-          .eq("tour_date", today)
-          .eq("driver_id", driver.id)
-          .eq("rollkarte_status", "received")
-          .eq("rollkarte_source", "whatsapp")
-          .gte("rollkarte_answered_at", fiveMinutesAgo)
-          .maybeSingle();
-        if (recentlyReceived) {
-          await sendReply(from, getRollkarteConfirmedMessage(driver.first_name));
-          return new Response("OK", { status: 200 });
-        }
-      }
-
       // --- Extract rollkarte from natural-language reply ---
       // Pick the first tour (handle multiple tours below)
       const activeTours = driverTours.filter((t: any) => t.rollkarte_status !== "confirming");
@@ -307,7 +290,28 @@ export async function POST(request: NextRequest) {
       }
       return new Response("OK", { status: 200 });
     }
-    // Driver found but no pending rollkarte tours today → fall through to admin check
+
+    // Driver found but NO pending/requested/confirming tours.
+    // Could be: tour already confirmed (e.g. by an auto-reply "OK"), or driver
+    // is replying after we already processed the confirmation on a retry.
+    // Check whether an affirmative arrived for a recently-received tour.
+    if (isAffirmative) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data: recentlyReceived } = await supabase
+        .from("tours")
+        .select("id")
+        .eq("tour_date", today)
+        .eq("driver_id", driver.id)
+        .eq("rollkarte_status", "received")
+        .eq("rollkarte_source", "whatsapp")
+        .gte("rollkarte_answered_at", fiveMinutesAgo)
+        .maybeSingle();
+      if (recentlyReceived) {
+        await sendReply(from, getRollkarteConfirmedMessage(driver.first_name));
+        return new Response("OK", { status: 200 });
+      }
+    }
+    // Fall through to admin check (driver may also have admin role)
   }
 
   // =========================================================
