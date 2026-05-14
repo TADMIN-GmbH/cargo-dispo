@@ -793,14 +793,14 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                       {/* Live preview */}
                       {pricingForm.daily_rate_netto && (
                         <div className="rounded-md bg-blue-50 border border-blue-200 p-2.5 text-xs text-blue-700">
-                          <p className="font-semibold mb-1">Vorschau (bei akt. Diesel 1,4588 €/l netto)</p>
+                          <p className="font-semibold mb-1">Vorschau (bei akt. Diesel 1,7359 €/l brutto)</p>
                           {(() => {
                             const rate = parseFloat(pricingForm.daily_rate_netto) || 0;
                             const maut = parseFloat(pricingForm.maut_flat) || 0;
                             const base = parseFloat(pricingForm.diesel_base_price) || 1.04;
                             const factor = parseFloat(pricingForm.diesel_factor) || 20;
-                            const currentDieselNetto = 1.7359 / 1.19;
-                            const dieselPct = (currentDieselNetto - base) / base * 100 * factor / 100;
+                            const currentDieselBrutto = 1.7359;
+                            const dieselPct = (currentDieselBrutto - base) / base * 100 * factor / 100;
                             const dieselAmt = rate * dieselPct / 100;
                             const total = rate + maut + dieselAmt;
                             return (

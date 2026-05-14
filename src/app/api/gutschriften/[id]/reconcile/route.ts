@@ -62,9 +62,9 @@ export async function POST(
   // Load all diesel prices once (for the 2-month lag lookup)
   const { data: allDieselPrices } = await supabase
     .from("diesel_prices")
-    .select("month, price_netto");
+    .select("month, price_brutto");
   const dieselMap = new Map<string, number>(
-    (allDieselPrices ?? []).map((d) => [d.month, d.price_netto])
+    (allDieselPrices ?? []).map((d) => [d.month, d.price_brutto])
   );
 
   // Load all pricing models for this customer (if known)
