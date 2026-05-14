@@ -153,6 +153,13 @@ export async function POST(request: NextRequest) {
     return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
   }
 
+  // Twilio Sandbox sends a bare "OK" as an automatic acknowledgment after
+  // every incoming message. Silently drop it here before any processing so
+  // it never interferes with the rollkarte confirmation flow.
+  if (/^ok$/i.test(transcript.trim())) {
+    return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+  }
+
   // =========================================================
   // STEP 1: Check if sender is a known driver with a tour today
   // =========================================================
