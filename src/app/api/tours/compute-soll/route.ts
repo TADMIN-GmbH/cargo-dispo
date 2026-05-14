@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const since: string = body.since ?? "2026-01-01";
   const tourId: string | null = body.tour_id ?? null;
+  // Targeted recompute filters (much faster than full backfill)
+  const customerId: string | null = body.customer_id ?? null;
+  const vehicleType: string | null = body.vehicle_type ?? null;
+  const vehicleId: string | null = body.vehicle_id ?? null;
 
   // Load en2x prices
   const { data: en2xRows } = await supabase.from("diesel_prices").select("month, price_brutto");
@@ -127,12 +131,12 @@ export async function POST(req: NextRequest) {
     }
     total = (tours ?? []).length;
   } else {
-    // Paginated full backfill
+    // Targeted or full paginated backfill
     const PAGE = 500;
     let offset = 0;
     let fetchedCount = 0;
     do {
-      const { data: tours, error: toursError } = await supabase
+      let q = supabase
         .from("tours")
         .select("id, tour_date, customer_id, vehicle_id, vehicle:vehicles(type, km_class)")
         .not("customer_id", "is", null)
@@ -141,6 +145,12 @@ export async function POST(req: NextRequest) {
         .order("tour_date")
         .range(offset, offset + PAGE - 1);
 
+      // Apply targeted filters if provided
+      if (customerId) q = q.eq("customer_id", customerId);
+      if (vehicleId)  q = q.eq("vehicle_id", vehicleId);
+
+      const { data: tours, error: toursError } = await q;
+
       if (toursError) return NextResponse.json({ error: toursError.message }, { status: 500 });
       fetchedCount = (tours ?? []).length;
       total += fetchedCount;
@@ -148,6 +158,8 @@ export async function POST(req: NextRequest) {
       for (const tour of tours ?? []) {
         const vehicle = Array.isArray(tour.vehicle) ? tour.vehicle[0] : tour.vehicle;
         if (!vehicle?.type || !tour.customer_id) { skipped++; continue; }
+        // Skip if vehicle_type filter doesn't match
+        if (vehicleType && vehicle.type !== vehicleType) { skipped++; continue; }
         const soll = computeSoll(tour.customer_id, vehicle.type, vehicle.km_class ?? null, tour.tour_date);
         if (soll === null) { skipped++; continue; }
         await supabase.from("tours").update({ soll_netto: soll }).eq("id", tour.id);

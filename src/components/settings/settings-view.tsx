@@ -171,8 +171,8 @@ export function SettingsView({ profile, email }: SettingsViewProps) {
             <Euro className="w-5 h-5" /> Soll-Berechnung Touren
           </CardTitle>
           <CardDescription>
-            Berechnet den Soll-Tagessatz für alle Touren ab 01.01.2026 neu – anhand der hinterlegten Preismodelle und Dieselpreise.
-            Nutzen nach Änderung eines Preismodells.
+            Normalerweise passiert die Neuberechnung automatisch – beim Speichern einer Tour, eines Preismodells oder nach Fahrzeugtyp-Änderung.
+            Dieser Button berechnet <strong>alle</strong> Touren seit 01.01.2026 neu (dauert ca. 30 Sek.) und ist nur für Notfälle gedacht.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

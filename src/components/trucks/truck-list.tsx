@@ -208,6 +208,15 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       }
     }
 
+    // If type or km_class changed, recompute soll for this vehicle's tours
+    if (editing && savedId && (editing.type !== form.type || (editing as any).km_class !== (form.km_class || null))) {
+      fetch("/api/tours/compute-soll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vehicle_id: savedId, since: "2026-01-01" }),
+      }).catch(() => {/* silent */});
+    }
+
     setSaving(false);
     setDialogOpen(false);
   }

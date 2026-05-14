@@ -52,6 +52,19 @@ export async function POST(
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Trigger targeted soll recompute for this customer + vehicle_type from valid_from
+  const baseUrl = req.nextUrl.origin;
+  fetch(`${baseUrl}/api/tours/compute-soll`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customer_id: id,
+      vehicle_type: body.vehicle_type,
+      since: body.valid_from,
+    }),
+  }).catch(() => {/* silent */});
+
   return NextResponse.json(data);
 }
 
