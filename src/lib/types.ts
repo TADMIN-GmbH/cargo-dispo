@@ -5,6 +5,7 @@ export interface AppUser {
   email: string;
   full_name: string;
   role: UserRole;
+  whatsapp_phone?: string;
   created_at: string;
 }
 
@@ -63,6 +64,8 @@ export interface Customer {
   phone?: string;
   email?: string;
   notes?: string;
+  rollkarte_prefix?: string;
+  rollkarte_accepts_text?: boolean;
   created_at: string;
 }
 
@@ -80,7 +83,7 @@ export interface Tour {
   delivery_address?: string;
   notes?: string;
   rollkarte_number?: string;
-  rollkarte_status: "pending" | "requested" | "received" | "manual";
+  rollkarte_status: "pending" | "requested" | "confirming" | "received" | "manual";
   rollkarte_requested_at?: string;
   rollkarte_answered_at?: string;
   rollkarte_source?: "whatsapp" | "manual";

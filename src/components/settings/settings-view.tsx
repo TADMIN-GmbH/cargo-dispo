@@ -6,16 +6,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, User, Lock, CheckCircle } from "lucide-react";
+import { Settings, User, Lock, CheckCircle, MessageCircle } from "lucide-react";
 
 interface SettingsViewProps {
-  profile: { id: string; full_name: string; role: string };
+  profile: { id: string; full_name: string; role: string; whatsapp_phone?: string };
   email: string;
 }
 
 export function SettingsView({ profile, email }: SettingsViewProps) {
   const supabase = createClient();
   const [fullName, setFullName] = useState(profile.full_name);
+  const [whatsappPhone, setWhatsappPhone] = useState(profile.whatsapp_phone ?? "");
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -27,7 +28,10 @@ export function SettingsView({ profile, email }: SettingsViewProps) {
 
   async function handleSaveProfile() {
     setSaving(true);
-    await supabase.from("profiles").update({ full_name: fullName }).eq("id", profile.id);
+    await supabase
+      .from("profiles")
+      .update({ full_name: fullName, whatsapp_phone: whatsappPhone || null })
+      .eq("id", profile.id);
     setSaving(false);
     setProfileSuccess(true);
     setTimeout(() => setProfileSuccess(false), 3000);
@@ -83,6 +87,21 @@ export function SettingsView({ profile, email }: SettingsViewProps) {
           <div className="space-y-1.5">
             <Label>Vollständiger Name</Label>
             <Input value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-1.5">
+              <MessageCircle className="w-3.5 h-3.5 text-green-600" />
+              WhatsApp-Nummer (Admin-Befehle)
+            </Label>
+            <Input
+              type="tel"
+              placeholder="+4915128717591 oder 015128717591"
+              value={whatsappPhone}
+              onChange={(e) => setWhatsappPhone(e.target.value)}
+            />
+            <p className="text-xs text-gray-400">
+              Nur Administratoren mit hinterlegter Nummer können WhatsApp-Befehle erteilen (Touren anlegen, kopieren usw.).
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <Button onClick={handleSaveProfile} disabled={saving}>

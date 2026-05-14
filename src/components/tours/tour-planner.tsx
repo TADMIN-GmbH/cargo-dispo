@@ -22,10 +22,11 @@ const statusConfig = {
 };
 
 const rollkarteStatusConfig = {
-  pending:   { label: "Ausstehend", className: "bg-gray-100 text-gray-500" },
-  requested: { label: "Angefragt",  className: "bg-yellow-100 text-yellow-700" },
-  received:  { label: "Erhalten",   className: "bg-green-100 text-green-700" },
-  manual:    { label: "Manuell",    className: "bg-blue-100 text-blue-700" },
+  pending:    { label: "Ausstehend",   className: "bg-gray-100 text-gray-500" },
+  requested:  { label: "Angefragt",   className: "bg-yellow-100 text-yellow-700" },
+  confirming: { label: "Bestätigung", className: "bg-orange-100 text-orange-700" },
+  received:   { label: "Erhalten",    className: "bg-green-100 text-green-700" },
+  manual:     { label: "Manuell",     className: "bg-blue-100 text-blue-700" },
 };
 
 const emptyTour = {

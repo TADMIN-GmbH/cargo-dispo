@@ -1,4 +1,4 @@
-// Rotating message templates for Rollkarte requests and thank-yous.
+// Rotating message templates for Rollkarte requests, confirmations, and thank-yous.
 // Selection is based on day-of-year so it changes daily but is consistent within a day.
 
 const requestTemplates = [
@@ -22,6 +22,52 @@ const requestTemplates = [
 
   (name: string, customer: string) =>
     `Hallo ${name}, guten Morgen! ☕\n\nWir brauchen noch die Rollkartennummer für ${customer} heute.\n\nEinfach hier antworten, z.B.:\nRollkarte 12345\n\nDankeschön und einen schönen Tag! 😊`,
+];
+
+const confirmationTemplates = [
+  (name: string, number: string) =>
+    `Danke ${name}! 📋 Ich habe folgende Nummer erfasst:\n\n*${number}*\n\nIst das korrekt? Antworte einfach mit *JA* oder schick die richtige Nummer nochmal.`,
+
+  (name: string, number: string) =>
+    `Kurze Rückfrage, ${name}: Ich habe *${number}* notiert — stimmt das so? Antworte mit *JA* wenn alles passt, oder schick die korrekte Nummer.`,
+
+  (name: string, number: string) =>
+    `Habe *${number}* erfasst, ${name}. Passt das? Einfach *JA* antworten zur Bestätigung, oder die richtige Nummer schicken.`,
+
+  (name: string, number: string) =>
+    `Super ${name}! Zur Bestätigung: die Nummer lautet *${number}*. Richtig so? Antworte mit *JA* oder korrigiere die Nummer direkt.`,
+
+  (name: string, number: string) =>
+    `Ich habe *${number}* gespeichert, ${name}. Ist das die richtige Rollkartennummer? Kurze Bestätigung mit *JA* genügt!`,
+
+  (name: string, number: string) =>
+    `Notiert: *${number}* — stimmt das, ${name}? Antworte mit *JA* zur Bestätigung oder schick die korrekte Nummer.`,
+
+  (name: string, number: string) =>
+    `Fast fertig, ${name}! Rollkartennummer *${number}* — alles korrekt? *JA* zum Bestätigen, oder einfach die richtige Nummer schicken.`,
+];
+
+const confirmedTemplates = [
+  (name: string) =>
+    `Perfekt, danke ${name}! ✅ Alles eingetragen, gute Fahrt!`,
+
+  (name: string) =>
+    `Super, ${name}! 👍 Rollkarte bestätigt und gespeichert. Schöne Tour!`,
+
+  (name: string) =>
+    `Danke dir, ${name}! ✔️ Alles notiert — bleib sicher unterwegs!`,
+
+  (name: string) =>
+    `Erledigt, ${name}! 🙌 Rollkarte ist im System. Gutes Gelingen heute!`,
+
+  (name: string) =>
+    `Top, ${name}! ✅ Bestätigt und gespeichert. Gute Fahrt! 🚛`,
+
+  (name: string) =>
+    `Alles klar, ${name}! 😊 Rollkarte erfasst — einen schönen Tag noch!`,
+
+  (name: string) =>
+    `Prima, ${name}! 👌 Rollkarte gespeichert. Wir wünschen dir eine reibungslose Fahrt!`,
 ];
 
 const thankYouTemplates = [
@@ -56,6 +102,16 @@ function dayIndex(): number {
 export function getRollkarteRequestMessage(firstName: string, customerName: string): string {
   const idx = dayIndex();
   return `🚛 Cargo Köhler\n\n` + requestTemplates[idx](firstName, customerName);
+}
+
+export function getRollkarteConfirmationMessage(firstName: string, number: string): string {
+  const idx = (dayIndex() + 1) % 7;
+  return confirmationTemplates[idx](firstName, number);
+}
+
+export function getRollkarteConfirmedMessage(firstName: string): string {
+  const idx = (dayIndex() + 2) % 7;
+  return confirmedTemplates[idx](firstName);
 }
 
 export function getRollkarteThankYouMessage(firstName: string, rollkarteNumber: string): string {

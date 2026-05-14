@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin } from "lucide-react";
+import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, Hash } from "lucide-react";
 
 const emptyCustomer = {
   company_name: "",
@@ -21,6 +21,8 @@ const emptyCustomer = {
   phone: "",
   email: "",
   notes: "",
+  rollkarte_prefix: "",
+  rollkarte_accepts_text: false,
 };
 
 interface CustomerListProps {
@@ -63,6 +65,8 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
       phone: c.phone ?? "",
       email: c.email ?? "",
       notes: c.notes ?? "",
+      rollkarte_prefix: c.rollkarte_prefix ?? "",
+      rollkarte_accepts_text: c.rollkarte_accepts_text ?? false,
     });
     setDialogOpen(true);
   }
@@ -79,6 +83,8 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
       phone: form.phone || null,
       email: form.email || null,
       notes: form.notes || null,
+      rollkarte_prefix: form.rollkarte_prefix || null,
+      rollkarte_accepts_text: form.rollkarte_accepts_text,
     };
 
     if (editing) {
@@ -280,6 +286,59 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
               <Label>Notizen</Label>
               <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
             </div>
+
+            {/* Rollkarte settings */}
+            <div className="rounded-lg border border-gray-200 p-3 space-y-3 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                <Hash className="w-3.5 h-3.5" /> WhatsApp Rollkarte
+              </p>
+              {/* Type toggle */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, rollkarte_accepts_text: false })}
+                  className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                    !form.rollkarte_accepts_text
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                  }`}
+                >
+                  Nummer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, rollkarte_accepts_text: true, rollkarte_prefix: "" })}
+                  className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                    form.rollkarte_accepts_text
+                      ? "bg-blue-600 text-white border-blue-600"
+                      : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                  }`}
+                >
+                  Text (Ortsname o.ä.)
+                </button>
+              </div>
+              {/* Prefix — only for number mode */}
+              {!form.rollkarte_accepts_text && (
+                <div className="space-y-1">
+                  <Label className="text-xs">Erwarteter Präfix (optional)</Label>
+                  <Input
+                    placeholder='z.B. "26-" oder "RK"'
+                    value={form.rollkarte_prefix}
+                    onChange={(e) => setForm({ ...form, rollkarte_prefix: e.target.value })}
+                    className="h-8 text-sm"
+                  />
+                  <p className="text-[11px] text-gray-400">
+                    Wenn gesetzt, wird der Fahrer auch ohne explizite Rollkarten-Antwort erkannt — z.B. "... mit der Nummer 26-8365401".
+                  </p>
+                </div>
+              )}
+              {form.rollkarte_accepts_text && (
+                <p className="text-[11px] text-gray-400">
+                  Der Fahrer kann als Rollkarte auch Orte oder Freitext schicken (z.B. "Werl, Ense, Soest"). Die gesamte Antwort wird gespeichert.
+                </p>
+              )}
+            </div>
+
             <div className="flex gap-3 justify-end pt-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
               <Button onClick={handleSave} disabled={saving || !form.company_name}>
