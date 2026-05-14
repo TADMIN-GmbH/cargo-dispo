@@ -77,6 +77,9 @@ export interface Customer {
   rollkarte_accepts_text?: boolean;
   vehicle_ref_label?: string;
   vehicle_aliases?: CustomerVehicleAlias[];
+  price_daily_rate?: number;
+  price_diesel_pct?: number;
+  price_toll_flat?: number;
   created_at: string;
 }
 

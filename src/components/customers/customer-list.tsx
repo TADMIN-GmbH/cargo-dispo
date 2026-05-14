@@ -24,6 +24,9 @@ const emptyCustomer = {
   rollkarte_prefix: "",
   rollkarte_accepts_text: false,
   vehicle_ref_label: "Kennzeichen",
+  price_daily_rate: undefined as number | undefined,
+  price_diesel_pct: undefined as number | undefined,
+  price_toll_flat: undefined as number | undefined,
 };
 
 interface CustomerListProps {
@@ -43,6 +46,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   const [view, setView] = useState<"table" | "cards">("table");
   const [aliases, setAliases] = useState<CustomerVehicleAlias[]>([]);
   const [newAlias, setNewAlias] = useState({ alias: "", vehicle_id: "" });
+  const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "preisformel">("stammdaten");
 
   const filtered = customers.filter(
     (c) =>
@@ -56,6 +60,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
     setForm(emptyCustomer);
     setAliases([]);
     setNewAlias({ alias: "", vehicle_id: "" });
+    setDialogTab("stammdaten");
     setDialogOpen(true);
   }
 
@@ -63,6 +68,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
     setEditing(c);
     setAliases(c.vehicle_aliases ?? []);
     setNewAlias({ alias: "", vehicle_id: "" });
+    setDialogTab("stammdaten");
     setForm({
       company_name: c.company_name,
       contact_person: c.contact_person ?? "",
@@ -76,6 +82,9 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
       rollkarte_prefix: c.rollkarte_prefix ?? "",
       rollkarte_accepts_text: c.rollkarte_accepts_text ?? false,
       vehicle_ref_label: c.vehicle_ref_label ?? "Kennzeichen",
+      price_daily_rate: c.price_daily_rate ?? undefined,
+      price_diesel_pct: c.price_diesel_pct ?? undefined,
+      price_toll_flat: c.price_toll_flat ?? undefined,
     });
     setDialogOpen(true);
   }
@@ -95,6 +104,9 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
       rollkarte_prefix: form.rollkarte_prefix || null,
       rollkarte_accepts_text: form.rollkarte_accepts_text,
       vehicle_ref_label: form.vehicle_ref_label || "Kennzeichen",
+      price_daily_rate: form.price_daily_rate ?? null,
+      price_diesel_pct: form.price_diesel_pct ?? null,
+      price_toll_flat: form.price_toll_flat ?? null,
     };
 
     if (editing) {
@@ -277,186 +289,284 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
           <DialogHeader>
             <DialogTitle>{editing ? "Kunde bearbeiten" : "Kunde hinzufügen"}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-2">
-            <div className="space-y-1.5">
-              <Label>Firmenname *</Label>
-              <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Ansprechpartner</Label>
-              <Input value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Straße</Label>
-              <Input value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label>PLZ</Label>
-                <Input value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })} />
-              </div>
-              <div className="col-span-2 space-y-1.5">
-                <Label>Stadt</Label>
-                <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label>Telefon</Label>
-                <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>E-Mail</Label>
-                <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Notizen</Label>
-              <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            </div>
 
-            {/* Rollkarte settings */}
-            <div className="rounded-lg border border-gray-200 p-3 space-y-3 bg-gray-50">
-              <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
-                <Hash className="w-3.5 h-3.5" /> WhatsApp Rollkarte
-              </p>
-              {/* Type toggle */}
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, rollkarte_accepts_text: false })}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-                    !form.rollkarte_accepts_text
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Nummer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, rollkarte_accepts_text: true, rollkarte_prefix: "" })}
-                  className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-                    form.rollkarte_accepts_text
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
-                  }`}
-                >
-                  Text (Ortsname o.ä.)
-                </button>
-              </div>
-              {/* Prefix — only for number mode */}
-              {!form.rollkarte_accepts_text && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Erwarteter Präfix (optional)</Label>
-                  <Input
-                    placeholder='z.B. "26-" oder "RK"'
-                    value={form.rollkarte_prefix}
-                    onChange={(e) => setForm({ ...form, rollkarte_prefix: e.target.value })}
-                    className="h-8 text-sm"
-                  />
-                  <p className="text-[11px] text-gray-400">
-                    Wenn gesetzt, wird der Fahrer auch ohne explizite Rollkarten-Antwort erkannt — z.B. "... mit der Nummer 26-8365401".
-                  </p>
+          {/* Tab buttons */}
+          <div className="flex border-b border-gray-200 -mx-6 px-6 mb-4">
+            {(["stammdaten", "einstellungen", "preisformel"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setDialogTab(t)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                  dialogTab === t ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {t === "stammdaten" ? "Stammdaten" : t === "einstellungen" ? "Einstellungen" : "Preisformel"}
+              </button>
+            ))}
+          </div>
+
+          {/* Scrollable tab content */}
+          <div className="max-h-[60vh] overflow-y-auto">
+            {dialogTab === "stammdaten" && (
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Firmenname *</Label>
+                  <Input value={form.company_name} onChange={(e) => setForm({ ...form, company_name: e.target.value })} />
                 </div>
-              )}
-              {form.rollkarte_accepts_text && (
-                <p className="text-[11px] text-gray-400">
-                  Der Fahrer kann als Rollkarte auch Orte oder Freitext schicken (z.B. "Werl, Ense, Soest"). Die gesamte Antwort wird gespeichert.
-                </p>
-              )}
-            </div>
-
-            {/* Fahrzeugreferenz */}
-            <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50">
-              <p className="text-xs font-semibold text-gray-600">Fahrzeugreferenz in Gutschriften</p>
-              <div className="flex gap-2">
-                {["Kennzeichen", "LKW-Nr.", "Fahrzeug-ID"].map((opt) => (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => setForm({ ...form, vehicle_ref_label: opt })}
-                    className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-                      form.vehicle_ref_label === opt
-                        ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
-                    }`}
-                  >
-                    {opt}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[11px] text-gray-400">
-                Legt fest, wie die Fahrzeugreferenz in Gutschriften dieses Kunden bezeichnet wird (z.B. Kennzeichen oder interne LKW-Nummer).
-              </p>
-            </div>
-
-            {/* Vehicle alias mapping — only show when editing an existing customer and vehicle_ref_label is not "Kennzeichen" */}
-            {editing && form.vehicle_ref_label !== "Kennzeichen" && (
-              <div className="rounded-lg border border-gray-200 p-3 space-y-3 bg-gray-50">
-                <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
-                  <ArrowLeftRight className="w-3.5 h-3.5" /> {form.vehicle_ref_label} → Fahrzeug zuordnen
-                </p>
-
-                {/* existing aliases */}
-                {aliases.length > 0 && (
+                <div className="space-y-1.5">
+                  <Label>Ansprechpartner</Label>
+                  <Input value={form.contact_person} onChange={(e) => setForm({ ...form, contact_person: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Straße</Label>
+                  <Input value={form.street} onChange={(e) => setForm({ ...form, street: e.target.value })} />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1.5">
-                    {aliases.map((a) => {
-                      const v = vehicles.find((v) => v.id === a.vehicle_id);
-                      return (
-                        <div key={a.id} className="flex items-center gap-2 text-xs bg-white rounded border border-gray-200 px-2 py-1.5">
-                          <span className="font-mono font-semibold text-gray-700 min-w-[60px]">{a.alias}</span>
-                          <span className="text-gray-400">→</span>
-                          <span className="text-gray-700">{v ? `${v.license_plate}` : <span className="text-gray-400">–</span>}</span>
-                          <button onClick={() => deleteAlias(a.id)} className="ml-auto text-red-400 hover:text-red-600">
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
-                      );
-                    })}
+                    <Label>PLZ</Label>
+                    <Input value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })} />
                   </div>
-                )}
-
-                {/* add new alias row */}
-                <div className="flex gap-2 items-center">
-                  <Input
-                    placeholder={form.vehicle_ref_label + " z.B. 3803"}
-                    value={newAlias.alias}
-                    onChange={(e) => setNewAlias({ ...newAlias, alias: e.target.value })}
-                    className="h-8 text-xs flex-1"
-                  />
-                  <span className="text-gray-400 text-xs">→</span>
-                  <select
-                    value={newAlias.vehicle_id}
-                    onChange={(e) => setNewAlias({ ...newAlias, vehicle_id: e.target.value })}
-                    className="h-8 text-xs border border-gray-300 rounded-md px-2 flex-1 bg-white"
-                  >
-                    <option value="">Fahrzeug wählen</option>
-                    {vehicles.map((v) => (
-                      <option key={v.id} value={v.id}>{v.license_plate}</option>
-                    ))}
-                  </select>
-                  <Button
-                    size="sm"
-                    className="h-8 px-2"
-                    disabled={!newAlias.alias || !newAlias.vehicle_id}
-                    onClick={saveAlias}
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
+                  <div className="col-span-2 space-y-1.5">
+                    <Label>Stadt</Label>
+                    <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
+                  </div>
                 </div>
-                <p className="text-[11px] text-gray-400">
-                  Zuordnungen werden sofort gespeichert und gelten für alle Gutschriften dieses Kunden.
-                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Telefon</Label>
+                    <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>E-Mail</Label>
+                    <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Notizen</Label>
+                  <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                </div>
               </div>
             )}
 
-            <div className="flex gap-3 justify-end pt-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
-              <Button onClick={handleSave} disabled={saving || !form.company_name}>
-                {saving ? "Speichern..." : editing ? "Aktualisieren" : "Hinzufügen"}
-              </Button>
-            </div>
+            {dialogTab === "einstellungen" && (
+              <div className="space-y-4">
+                {/* Rollkarte settings */}
+                <div className="rounded-lg border border-gray-200 p-3 space-y-3 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                    <Hash className="w-3.5 h-3.5" /> WhatsApp Rollkarte
+                  </p>
+                  {/* Type toggle */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, rollkarte_accepts_text: false })}
+                      className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                        !form.rollkarte_accepts_text
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                      }`}
+                    >
+                      Nummer
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, rollkarte_accepts_text: true, rollkarte_prefix: "" })}
+                      className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                        form.rollkarte_accepts_text
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                      }`}
+                    >
+                      Text (Ortsname o.ä.)
+                    </button>
+                  </div>
+                  {/* Prefix — only for number mode */}
+                  {!form.rollkarte_accepts_text && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Erwarteter Präfix (optional)</Label>
+                      <Input
+                        placeholder='z.B. "26-" oder "RK"'
+                        value={form.rollkarte_prefix}
+                        onChange={(e) => setForm({ ...form, rollkarte_prefix: e.target.value })}
+                        className="h-8 text-sm"
+                      />
+                      <p className="text-[11px] text-gray-400">
+                        Wenn gesetzt, wird der Fahrer auch ohne explizite Rollkarten-Antwort erkannt — z.B. "... mit der Nummer 26-8365401".
+                      </p>
+                    </div>
+                  )}
+                  {form.rollkarte_accepts_text && (
+                    <p className="text-[11px] text-gray-400">
+                      Der Fahrer kann als Rollkarte auch Orte oder Freitext schicken (z.B. "Werl, Ense, Soest"). Die gesamte Antwort wird gespeichert.
+                    </p>
+                  )}
+                </div>
+
+                {/* Fahrzeugreferenz */}
+                <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-600">Fahrzeugreferenz in Gutschriften</p>
+                  <div className="flex gap-2">
+                    {["Kennzeichen", "LKW-Nr.", "Fahrzeug-ID"].map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setForm({ ...form, vehicle_ref_label: opt })}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                          form.vehicle_ref_label === opt
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Legt fest, wie die Fahrzeugreferenz in Gutschriften dieses Kunden bezeichnet wird (z.B. Kennzeichen oder interne LKW-Nummer).
+                  </p>
+                </div>
+
+                {/* Vehicle alias mapping — only show when editing an existing customer and vehicle_ref_label is not "Kennzeichen" */}
+                {editing && form.vehicle_ref_label !== "Kennzeichen" && (
+                  <div className="rounded-lg border border-gray-200 p-3 space-y-3 bg-gray-50">
+                    <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                      <ArrowLeftRight className="w-3.5 h-3.5" /> {form.vehicle_ref_label} → Fahrzeug zuordnen
+                    </p>
+
+                    {/* existing aliases */}
+                    {aliases.length > 0 && (
+                      <div className="space-y-1.5">
+                        {aliases.map((a) => {
+                          const v = vehicles.find((v) => v.id === a.vehicle_id);
+                          return (
+                            <div key={a.id} className="flex items-center gap-2 text-xs bg-white rounded border border-gray-200 px-2 py-1.5">
+                              <span className="font-mono font-semibold text-gray-700 min-w-[60px]">{a.alias}</span>
+                              <span className="text-gray-400">→</span>
+                              <span className="text-gray-700">{v ? `${v.license_plate}` : <span className="text-gray-400">–</span>}</span>
+                              <button onClick={() => deleteAlias(a.id)} className="ml-auto text-red-400 hover:text-red-600">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* add new alias row */}
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        placeholder={form.vehicle_ref_label + " z.B. 3803"}
+                        value={newAlias.alias}
+                        onChange={(e) => setNewAlias({ ...newAlias, alias: e.target.value })}
+                        className="h-8 text-xs flex-1"
+                      />
+                      <span className="text-gray-400 text-xs">→</span>
+                      <select
+                        value={newAlias.vehicle_id}
+                        onChange={(e) => setNewAlias({ ...newAlias, vehicle_id: e.target.value })}
+                        className="h-8 text-xs border border-gray-300 rounded-md px-2 flex-1 bg-white"
+                      >
+                        <option value="">Fahrzeug wählen</option>
+                        {vehicles.map((v) => (
+                          <option key={v.id} value={v.id}>{v.license_plate}</option>
+                        ))}
+                      </select>
+                      <Button
+                        size="sm"
+                        className="h-8 px-2"
+                        disabled={!newAlias.alias || !newAlias.vehicle_id}
+                        onClick={saveAlias}
+                      >
+                        <Plus className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Zuordnungen werden sofort gespeichert und gelten für alle Gutschriften dieses Kunden.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {dialogTab === "preisformel" && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label>Tagespauschale (€)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="510.00"
+                      value={form.price_daily_rate ?? ""}
+                      onChange={(e) => setForm({ ...form, price_daily_rate: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Diesel-Zuschlag (%)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      placeholder="8.5"
+                      value={form.price_diesel_pct ?? ""}
+                      onChange={(e) => setForm({ ...form, price_diesel_pct: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Maut-Zuschlag (€/Tag, Pauschale)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="34.99"
+                    value={form.price_toll_flat ?? ""}
+                    onChange={(e) => setForm({ ...form, price_toll_flat: e.target.value ? parseFloat(e.target.value) : undefined })}
+                  />
+                </div>
+
+                {/* Live preview */}
+                {(form.price_daily_rate || form.price_diesel_pct || form.price_toll_flat) && (
+                  <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-2">
+                    <p className="text-xs font-semibold text-blue-700">Berechneter Tagespreis</p>
+                    <div className="text-xs text-blue-600 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Tagespauschale</span>
+                        <span className="font-mono">{(form.price_daily_rate ?? 0).toFixed(2)} €</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Diesel ({form.price_diesel_pct ?? 0} %)</span>
+                        <span className="font-mono">+ {((form.price_daily_rate ?? 0) * (form.price_diesel_pct ?? 0) / 100).toFixed(2)} €</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Maut-Pauschale</span>
+                        <span className="font-mono">+ {(form.price_toll_flat ?? 0).toFixed(2)} €</span>
+                      </div>
+                      <div className="flex justify-between border-t border-blue-300 pt-1 font-bold text-blue-800">
+                        <span>Tagespreis gesamt</span>
+                        <span className="font-mono">
+                          {(
+                            (form.price_daily_rate ?? 0) +
+                            (form.price_daily_rate ?? 0) * (form.price_diesel_pct ?? 0) / 100 +
+                            (form.price_toll_flat ?? 0)
+                          ).toFixed(2)} €
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400">
+                  Der Diesel-Zuschlag wird als Prozentsatz der Tagespauschale berechnet und kann monatlich angepasst werden.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Always-visible action buttons */}
+          <div className="flex gap-3 justify-end pt-4 border-t border-gray-100 mt-2">
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
+            <Button onClick={handleSave} disabled={saving || !form.company_name}>
+              {saving ? "Speichern..." : editing ? "Aktualisieren" : "Hinzufügen"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
