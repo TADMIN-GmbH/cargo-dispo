@@ -103,6 +103,33 @@ export interface WhatsAppLog {
   created_at: string;
 }
 
+export interface Gutschrift {
+  id: string;
+  gutschrift_nr?: string;
+  document_date?: string;
+  absender?: string;
+  file_path?: string;
+  file_name?: string;
+  netto_gesamt?: number;
+  mwst?: number;
+  brutto_gesamt?: number;
+  extracted_by_ai?: boolean;
+  created_at: string;
+  positionen?: GutschriftPosition[];
+}
+
+export interface GutschriftPosition {
+  id: string;
+  gutschrift_id: string;
+  bel_datum?: string;
+  kennzeichen?: string;
+  tour_nr?: string;
+  auftrag_nr?: string;
+  kg?: number;
+  netto_betrag?: number;
+  created_at: string;
+}
+
 export interface Invite {
   id: string;
   email: string;
