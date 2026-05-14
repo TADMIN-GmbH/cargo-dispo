@@ -23,6 +23,7 @@ export interface Vehicle {
   vin?: string;
   tire_size?: string;
   towing_vehicle_id?: string;
+  km_class?: string;      // null | "300km" | "450km" — only relevant for SZM
   length_m?: number;
   width_m?: number;
   height_m?: number;
@@ -146,6 +147,10 @@ export interface Gutschrift {
   mwst?: number;
   brutto_gesamt?: number;
   extracted_by_ai?: boolean;
+  billing_type?: 'per_tour' | 'per_period';
+  period_from?: string;
+  period_to?: string;
+  reconciliation_status?: 'none' | 'pending' | 'ok' | 'conflict';
   created_at: string;
   positionen?: GutschriftPosition[];
 }
@@ -159,6 +164,51 @@ export interface GutschriftPosition {
   auftrag_nr?: string;
   kg?: number;
   netto_betrag?: number;
+  tour_id?: string;
+  vehicle_entry_id?: string;
+  daily_rate?: number;
+  diesel_amount?: number;
+  match_status?: string;
+  created_at: string;
+}
+
+export interface DieselPrice {
+  id: string;
+  month: string;          // "2026-02-01"
+  price_brutto: number;
+  price_netto: number;
+  fetched_at: string;
+  source_url?: string;
+  created_at: string;
+}
+
+export interface CustomerPricingModel {
+  id: string;
+  customer_id: string;
+  vehicle_type: string;   // "MW 12t" | "MW 15t" | "MW 18t" | "MW 26t" | "SZM"
+  km_class?: string;      // null | "300km" | "450km"
+  daily_rate_netto: number;
+  maut_flat: number;
+  diesel_base_price: number;
+  diesel_factor: number;  // e.g. 20 (= 20%)
+  valid_from: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface GutschriftVehicleEntry {
+  id: string;
+  gutschrift_id: string;
+  license_plate: string;
+  period_from?: string;
+  period_to?: string;
+  days_claimed?: number;
+  daily_rate?: number;
+  netto_subtotal?: number;
+  diesel_pct?: number;
+  diesel_amount?: number;
+  days_found?: number;
+  match_status: 'pending' | 'matched' | 'conflict' | 'accepted';
   created_at: string;
 }
 

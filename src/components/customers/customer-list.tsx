@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Customer, CustomerVehicleAlias, Vehicle } from "@/lib/types";
+import { Customer, CustomerVehicleAlias, Vehicle, CustomerPricingModel } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, Hash, ArrowLeftRight, Navigation } from "lucide-react";
 import { CustomerLocation } from "@/lib/types";
@@ -51,7 +52,11 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   const [locations, setLocations] = useState<CustomerLocation[]>([]);
   const [locationForm, setLocationForm] = useState({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
   const [editingLocation, setEditingLocation] = useState<CustomerLocation | null>(null);
-  const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "standorte" | "preisformel">("stammdaten");
+  const [pricingModels, setPricingModels] = useState<CustomerPricingModel[]>([]);
+  const emptyPricingForm = { vehicle_type: "", km_class: "", daily_rate_netto: "", maut_flat: "0", diesel_base_price: "1.04", diesel_factor: "20", valid_from: new Date().toISOString().slice(0, 10), notes: "" };
+  const [pricingForm, setPricingForm] = useState(emptyPricingForm);
+  const [savingPricing, setSavingPricing] = useState(false);
+  const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "standorte" | "preismodell" | "preisformel">("stammdaten");
 
   const filtered = customers.filter(
     (c) =>
@@ -68,6 +73,8 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
     setLocations([]);
     setLocationForm({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
     setEditingLocation(null);
+    setPricingModels([]);
+    setPricingForm(emptyPricingForm);
     setDialogTab("stammdaten");
     setDialogOpen(true);
   }
@@ -79,6 +86,10 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
     setLocations(c.locations ?? []);
     setLocationForm({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
     setEditingLocation(null);
+    setPricingModels([]);
+    setPricingForm(emptyPricingForm);
+    // Load pricing models for this customer
+    fetch(`/api/customers/${c.id}/pricing`).then(r => r.json()).then(setPricingModels).catch(() => {});
     setDialogTab("stammdaten");
     setForm({
       company_name: c.company_name,
@@ -182,6 +193,36 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   async function deleteLocation(id: string) {
     await supabase.from("customer_locations").delete().eq("id", id);
     setLocations((prev) => prev.filter((l) => l.id !== id));
+  }
+
+  async function savePricingModel() {
+    if (!editing || !pricingForm.vehicle_type || !pricingForm.daily_rate_netto || !pricingForm.valid_from) return;
+    setSavingPricing(true);
+    const res = await fetch(`/api/customers/${editing.id}/pricing`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vehicle_type: pricingForm.vehicle_type,
+        km_class: pricingForm.vehicle_type === "SZM" && pricingForm.km_class ? pricingForm.km_class : null,
+        daily_rate_netto: parseFloat(pricingForm.daily_rate_netto),
+        maut_flat: parseFloat(pricingForm.maut_flat) || 0,
+        diesel_base_price: parseFloat(pricingForm.diesel_base_price) || 1.04,
+        diesel_factor: parseFloat(pricingForm.diesel_factor) || 20,
+        valid_from: pricingForm.valid_from,
+        notes: pricingForm.notes || null,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      setPricingModels((prev) => [data, ...prev].sort((a, b) => a.vehicle_type.localeCompare(b.vehicle_type) || b.valid_from.localeCompare(a.valid_from)));
+      setPricingForm(emptyPricingForm);
+    }
+    setSavingPricing(false);
+  }
+
+  async function deletePricingModel(id: string) {
+    await fetch(`/api/customers/${editing!.id}/pricing?rowId=${id}`, { method: "DELETE" });
+    setPricingModels((prev) => prev.filter((m) => m.id !== id));
   }
 
   async function handleDelete(id: string) {
@@ -336,17 +377,21 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
           </DialogHeader>
 
           {/* Tab buttons */}
-          <div className="flex border-b border-gray-200 -mx-6 px-6 mb-4">
-            {(["stammdaten", "standorte", "einstellungen", "preisformel"] as const).map((t) => (
+          <div className="flex border-b border-gray-200 -mx-6 px-6 mb-4 overflow-x-auto">
+            {(["stammdaten", "standorte", "einstellungen", "preismodell", "preisformel"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setDialogTab(t)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                   dialogTab === t ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
-                {t === "stammdaten" ? "Stammdaten" : t === "standorte" ? `Standorte${locations.length > 0 ? ` (${locations.length})` : ""}` : t === "einstellungen" ? "Einstellungen" : "Preisformel"}
+                {t === "stammdaten" ? "Stammdaten"
+                  : t === "standorte" ? `Standorte${locations.length > 0 ? ` (${locations.length})` : ""}`
+                  : t === "einstellungen" ? "Einstellungen"
+                  : t === "preismodell" ? `Preismodell${pricingModels.length > 0 ? ` (${pricingModels.length})` : ""}`
+                  : "Preisformel (alt)"}
               </button>
             ))}
           </div>
@@ -643,6 +688,143 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                       Zuordnungen werden sofort gespeichert und gelten für alle Gutschriften dieses Kunden.
                     </p>
                   </div>
+                )}
+              </div>
+            )}
+
+            {dialogTab === "preismodell" && (
+              <div className="space-y-4">
+                {!editing && (
+                  <p className="text-sm text-gray-500 text-center py-4">Bitte zuerst den Kunden anlegen, dann Preismodelle hinzufügen.</p>
+                )}
+                {editing && (
+                  <>
+                    {/* Existing pricing models grouped by vehicle_type */}
+                    {pricingModels.length > 0 && (
+                      <div className="space-y-2">
+                        {pricingModels.map((m) => {
+                          const dieselPct = ((m.diesel_factor / 100) * ((1.7359 - m.diesel_base_price) / m.diesel_base_price) * 100).toFixed(1);
+                          const label = m.vehicle_type === "SZM" && m.km_class ? `${m.vehicle_type} (${m.km_class})` : m.vehicle_type;
+                          return (
+                            <div key={m.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-sm font-semibold text-gray-800">{label}</span>
+                                    <span className="text-xs bg-blue-100 text-blue-700 rounded px-1.5 py-0.5">ab {m.valid_from}</span>
+                                  </div>
+                                  <div className="mt-1 grid grid-cols-2 gap-x-4 text-xs text-gray-600">
+                                    <span>Tagessatz: <strong>{m.daily_rate_netto.toFixed(2)} €</strong></span>
+                                    <span>Maut: <strong>{m.maut_flat.toFixed(2)} €</strong></span>
+                                    <span>Diesel-Basis: <strong>{m.diesel_base_price.toFixed(4)} €</strong></span>
+                                    <span>Diesel-Faktor: <strong>{m.diesel_factor}%</strong></span>
+                                  </div>
+                                  {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
+                                </div>
+                                <button onClick={() => deletePricingModel(m.id)} className="p-1 text-gray-400 hover:text-red-600 shrink-0">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Add new pricing model form */}
+                    <div className="rounded-lg border border-dashed border-gray-300 p-3 space-y-3 bg-gray-50">
+                      <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Neues Preismodell</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Fahrzeugtyp *</Label>
+                          <select
+                            value={pricingForm.vehicle_type}
+                            onChange={(e) => setPricingForm({ ...pricingForm, vehicle_type: e.target.value, km_class: "" })}
+                            className="h-8 text-sm border border-gray-300 rounded-md px-2 w-full bg-white"
+                          >
+                            <option value="">Typ wählen</option>
+                            {["MW 12t", "MW 15t", "MW 18t", "MW 26t", "SZM", "Transporter", "PKW"].map(t => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </div>
+                        {pricingForm.vehicle_type === "SZM" && (
+                          <div className="space-y-1">
+                            <Label className="text-xs">Km-Klasse</Label>
+                            <select
+                              value={pricingForm.km_class}
+                              onChange={(e) => setPricingForm({ ...pricingForm, km_class: e.target.value })}
+                              className="h-8 text-sm border border-gray-300 rounded-md px-2 w-full bg-white"
+                            >
+                              <option value="">Nicht festgelegt</option>
+                              <option value="300km">300 km</option>
+                              <option value="450km">450 km</option>
+                            </select>
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          <Label className="text-xs">Gültig ab *</Label>
+                          <Input className="h-8 text-sm" type="date" value={pricingForm.valid_from} onChange={(e) => setPricingForm({ ...pricingForm, valid_from: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Tagessatz netto (€) *</Label>
+                          <Input className="h-8 text-sm" type="number" step="0.01" placeholder="455.00" value={pricingForm.daily_rate_netto} onChange={(e) => setPricingForm({ ...pricingForm, daily_rate_netto: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Maut-Pauschale (€/Tag)</Label>
+                          <Input className="h-8 text-sm" type="number" step="0.01" placeholder="72.59" value={pricingForm.maut_flat} onChange={(e) => setPricingForm({ ...pricingForm, maut_flat: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Diesel-Basis (€/l netto)</Label>
+                          <Input className="h-8 text-sm" type="number" step="0.0001" placeholder="1.04" value={pricingForm.diesel_base_price} onChange={(e) => setPricingForm({ ...pricingForm, diesel_base_price: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Diesel-Faktor (%)</Label>
+                          <Input className="h-8 text-sm" type="number" step="1" placeholder="20" value={pricingForm.diesel_factor} onChange={(e) => setPricingForm({ ...pricingForm, diesel_factor: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Notizen</Label>
+                        <Input className="h-8 text-sm" placeholder="z.B. Maut-Anpassung Q2/2026" value={pricingForm.notes} onChange={(e) => setPricingForm({ ...pricingForm, notes: e.target.value })} />
+                      </div>
+
+                      {/* Live preview */}
+                      {pricingForm.daily_rate_netto && (
+                        <div className="rounded-md bg-blue-50 border border-blue-200 p-2.5 text-xs text-blue-700">
+                          <p className="font-semibold mb-1">Vorschau (bei akt. Diesel 1,4588 €/l netto)</p>
+                          {(() => {
+                            const rate = parseFloat(pricingForm.daily_rate_netto) || 0;
+                            const maut = parseFloat(pricingForm.maut_flat) || 0;
+                            const base = parseFloat(pricingForm.diesel_base_price) || 1.04;
+                            const factor = parseFloat(pricingForm.diesel_factor) || 20;
+                            const currentDieselNetto = 1.7359 / 1.19;
+                            const dieselPct = (currentDieselNetto - base) / base * 100 * factor / 100;
+                            const dieselAmt = rate * dieselPct / 100;
+                            const total = rate + maut + dieselAmt;
+                            return (
+                              <div className="space-y-0.5">
+                                <div className="flex justify-between"><span>Tagessatz</span><span className="font-mono">{rate.toFixed(2)} €</span></div>
+                                <div className="flex justify-between"><span>Diesel-Zuschlag ({dieselPct.toFixed(2)} %)</span><span className="font-mono">+ {dieselAmt.toFixed(2)} €</span></div>
+                                <div className="flex justify-between"><span>Maut</span><span className="font-mono">+ {maut.toFixed(2)} €</span></div>
+                                <div className="flex justify-between border-t border-blue-300 pt-1 font-bold"><span>Gesamt/Tag</span><span className="font-mono">{total.toFixed(2)} €</span></div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end">
+                        <Button size="sm" className="h-8" onClick={savePricingModel} disabled={savingPricing || !pricingForm.vehicle_type || !pricingForm.daily_rate_netto || !pricingForm.valid_from}>
+                          <Plus className="w-3.5 h-3.5 mr-1" /> Preismodell hinzufügen
+                        </Button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-gray-400">
+                      Der neueste Eintrag pro Fahrzeugtyp (nach Gültig-ab) ist aktiv. Ältere Einträge dienen als Historik.
+                    </p>
+                  </>
                 )}
               </div>
             )}

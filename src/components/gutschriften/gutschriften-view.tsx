@@ -5,24 +5,40 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { FileText, Upload, Euro, Calendar, Trash2, Loader2, Car, Filter } from "lucide-react";
+import {
+  FileText, Upload, Euro, Calendar, Trash2, Loader2, Car, Filter,
+  GitMerge, CheckCircle, AlertTriangle, X, ChevronDown, ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Gutschrift, GutschriftPosition } from "@/lib/types";
+import type { Gutschrift, GutschriftPosition, GutschriftVehicleEntry } from "@/lib/types";
 
 type PositionWithGutschrift = GutschriftPosition & {
   gutschrift?: Pick<Gutschrift, "id" | "gutschrift_nr" | "document_date" | "absender" | "file_name"> | null;
 };
 
-// Must match the normalize function in gutschriften/page.tsx
 function normalizeAbsender(s: string) {
   return s.toLowerCase().replace(/[\s\-&.,]/g, "").replace(/gmbh|cokg|co\.kg|gmbh&co|&co/g, "");
+}
+
+interface ReconcileResult {
+  license_plate: string;
+  days_claimed: number;
+  days_found: number;
+  match_status: "matched" | "conflict";
+  tours: Array<{
+    id: string;
+    tour_date: string;
+    status: string;
+    driver: { first_name: string; last_name: string } | null;
+  }>;
 }
 
 interface GutschriftenViewProps {
   positionen: PositionWithGutschrift[];
   gutschriften: Gutschrift[];
-  aliasMap: Record<string, Record<string, string>>; // normalized_absender → { alias → license_plate }
-  invertMap: Record<string, boolean>; // normalized_absender → invert sign
+  aliasMap: Record<string, Record<string, string>>;
+  invertMap: Record<string, boolean>;
+  vehicleEntries: GutschriftVehicleEntry[];
 }
 
 function formatEur(val?: number | null): string {
@@ -54,8 +70,8 @@ function applyInvert(val: number | null | undefined, invert: boolean): number | 
   return invert ? -val : val;
 }
 
-export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap }: GutschriftenViewProps) {
-  const [activeTab, setActiveTab] = useState<Tab>("datum");
+export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap, vehicleEntries }: GutschriftenViewProps) {
+  const [activeTab, setActiveTab] = useState<Tab>("gutschriften");
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -66,16 +82,25 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
   const [filterVon, setFilterVon] = useState("");
   const [filterBis, setFilterBis] = useState("");
 
-  // Unique absender list for dropdown
+  // Reconciliation state
+  const [reconciling, setReconciling] = useState<string | null>(null);
+  const [reconcileModal, setReconcileModal] = useState<{
+    gutschrift: Gutschrift;
+    results: ReconcileResult[];
+  } | null>(null);
+  const [expandedVehicle, setExpandedVehicle] = useState<string | null>(null);
+
+  // Unique absender list
   const absenderList = useMemo(() => {
     const set = new Set<string>();
     gutschriften.forEach((g) => { if (g.absender) set.add(g.absender); });
     return Array.from(set).sort();
   }, [gutschriften]);
 
-  // Filtered positionen
+  // Filtered positionen (exclude period-based reconciliation rows for the table views)
   const filteredPositionen = useMemo(() => {
     return positionen.filter((p) => {
+      if (p.vehicle_entry_id) return false; // skip auto-generated reconciliation rows
       if (filterAbsender !== "all" && p.gutschrift?.absender !== filterAbsender) return false;
       if (filterVon && p.bel_datum && p.bel_datum < filterVon) return false;
       if (filterBis && p.bel_datum && p.bel_datum > filterBis) return false;
@@ -83,7 +108,6 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
     });
   }, [positionen, filterAbsender, filterVon, filterBis]);
 
-  // Filtered gutschriften
   const filteredGutschriften = useMemo(() => {
     return gutschriften.filter((g) => {
       if (filterAbsender !== "all" && g.absender !== filterAbsender) return false;
@@ -93,7 +117,6 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
     });
   }, [gutschriften, filterAbsender, filterVon, filterBis]);
 
-  // Grouped by Kennzeichen (use resolved plate as group key if available)
   const byKennzeichen = useMemo(() => {
     const map = new Map<string, { plate: string | null; raw: string; resolved: boolean; positionen: PositionWithGutschrift[]; netto: number }>();
     filteredPositionen.forEach((p) => {
@@ -108,9 +131,19 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
     return Array.from(map.entries())
       .map(([groupKey, data]) => ({ groupKey, ...data }))
       .sort((a, b) => a.groupKey.localeCompare(b.groupKey));
-  }, [filteredPositionen, aliasMap, normalizeAbsender]);
+  }, [filteredPositionen, aliasMap, invertMap]);
 
   const [expandedKennzeichen, setExpandedKennzeichen] = useState<string | null>(null);
+
+  // Build vehicle entries grouped by gutschrift for quick lookup
+  const vehicleEntriesByGutschrift = useMemo(() => {
+    const map: Record<string, GutschriftVehicleEntry[]> = {};
+    vehicleEntries.forEach((ve) => {
+      if (!map[ve.gutschrift_id]) map[ve.gutschrift_id] = [];
+      map[ve.gutschrift_id].push(ve);
+    });
+    return map;
+  }, [vehicleEntries]);
 
   const uploadFile = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
@@ -127,8 +160,11 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
       if (!res.ok || !data.success) {
         setUploadStatus({ type: "error", message: data.error ?? "Upload fehlgeschlagen." });
       } else {
-        setUploadStatus({ type: "success", message: `Gutschrift erfolgreich verarbeitet und gespeichert.` });
-        setTimeout(() => window.location.reload(), 1200);
+        const msg = data.billing_type === "per_period"
+          ? `Periodenabrechnung erkannt — ${data.vehicle_entries_count} Fahrzeug-Einträge gespeichert. Jetzt Abgleichen!`
+          : `Gutschrift erfolgreich verarbeitet und gespeichert.`;
+        setUploadStatus({ type: "success", message: msg });
+        setTimeout(() => window.location.reload(), 1800);
       }
     } catch (err: unknown) {
       setUploadStatus({ type: "error", message: err instanceof Error ? err.message : "Unbekannter Fehler" });
@@ -156,10 +192,25 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
     window.location.reload();
   }
 
+  async function handleReconcile(g: Gutschrift) {
+    setReconciling(g.id);
+    setReconcileModal(null);
+    setExpandedVehicle(null);
+    try {
+      const res = await fetch(`/api/gutschriften/${g.id}/reconcile`, { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setReconcileModal({ gutschrift: g, results: data.results });
+      }
+    } finally {
+      setReconciling(null);
+    }
+  }
+
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: "datum",        label: "Nach Datum",       icon: <Calendar className="w-3.5 h-3.5" /> },
-    { id: "kennzeichen",  label: "Nach Fahrzeug",    icon: <Car className="w-3.5 h-3.5" /> },
-    { id: "gutschriften", label: "Gutschriften",      icon: <Euro className="w-3.5 h-3.5" /> },
+    { id: "gutschriften", label: "Gutschriften", icon: <Euro className="w-3.5 h-3.5" /> },
+    { id: "datum",        label: "Nach Datum",   icon: <Calendar className="w-3.5 h-3.5" /> },
+    { id: "kennzeichen",  label: "Nach Fahrzeug", icon: <Car className="w-3.5 h-3.5" /> },
   ];
 
   const hasFilter = filterAbsender !== "all" || filterVon || filterBis;
@@ -171,7 +222,7 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
         <FileText className="w-7 h-7 text-blue-600" />
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gutschriften</h1>
-          <p className="text-sm text-gray-500">PDF-Gutschriften hochladen und auswerten</p>
+          <p className="text-sm text-gray-500">PDF-Gutschriften hochladen, auswerten und mit Touren abgleichen</p>
         </div>
       </div>
 
@@ -263,7 +314,124 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
           ))}
         </div>
 
-        {/* Tab: Nach Datum */}
+        {/* ── Tab: Gutschriften ── */}
+        {activeTab === "gutschriften" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Euro className="w-4 h-4" />
+                Gutschriften
+                <Badge className="ml-2">{filteredGutschriften.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {filteredGutschriften.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Keine Gutschriften gefunden.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 bg-gray-50">
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Datum</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Absender</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Gutschrift-Nr.</th>
+                        <th className="text-right px-4 py-3 font-semibold text-gray-600">Netto</th>
+                        <th className="text-right px-4 py-3 font-semibold text-gray-600">MwSt</th>
+                        <th className="text-right px-4 py-3 font-semibold text-gray-600">Brutto</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Abgleich</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Dateiname</th>
+                        <th className="px-4 py-3"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredGutschriften.map((g) => {
+                        const inv = !!invertMap[normalizeAbsender(g.absender ?? "")];
+                        const entries = vehicleEntriesByGutschrift[g.id] ?? [];
+                        return (
+                          <tr key={g.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-3 text-gray-700">{formatDate(g.document_date)}</td>
+                            <td className="px-4 py-3 text-gray-800 font-medium max-w-[180px] truncate">{g.absender ?? "–"}</td>
+                            <td className="px-4 py-3 text-gray-600">
+                              <div className="flex items-center gap-2">
+                                {g.gutschrift_nr ?? "–"}
+                                {g.billing_type === "per_period" && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">PERIODE</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-gray-800">{formatEur(applyInvert(g.netto_gesamt, inv))}</td>
+                            <td className="px-4 py-3 text-right font-mono text-gray-600">{formatEur(applyInvert(g.mwst, inv))}</td>
+                            <td className="px-4 py-3 text-right font-mono font-semibold text-gray-900">{formatEur(applyInvert(g.brutto_gesamt, inv))}</td>
+
+                            {/* Reconciliation status cell */}
+                            <td className="px-4 py-3">
+                              {g.billing_type === "per_period" ? (
+                                g.reconciliation_status === "ok" ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap">
+                                    <CheckCircle className="w-3 h-3" /> Abgeglichen
+                                  </span>
+                                ) : g.reconciliation_status === "conflict" ? (
+                                  <button
+                                    onClick={() => handleReconcile(g)}
+                                    disabled={reconciling === g.id}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 whitespace-nowrap"
+                                  >
+                                    {reconciling === g.id
+                                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                                      : <AlertTriangle className="w-3 h-3" />}
+                                    {reconciling === g.id ? "Läuft…" : `${entries.filter(e => e.match_status === "conflict").length} Konflikt(e)`}
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => handleReconcile(g)}
+                                    disabled={reconciling === g.id}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700 hover:bg-yellow-200 disabled:opacity-50 whitespace-nowrap"
+                                  >
+                                    {reconciling === g.id
+                                      ? <Loader2 className="w-3 h-3 animate-spin" />
+                                      : <GitMerge className="w-3 h-3" />}
+                                    {reconciling === g.id ? "Läuft…" : "Abgleichen"}
+                                  </button>
+                                )
+                              ) : (
+                                <span className="text-xs text-gray-400">–</span>
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3 text-gray-400 text-xs max-w-[140px] truncate">{g.file_name ?? "–"}</td>
+                            <td className="px-4 py-3">
+                              <button onClick={() => handleDelete(g.id)}
+                                className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Löschen">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-200 bg-gray-50">
+                        <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700">Gesamt</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.netto_gesamt, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.mwst, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.brutto_gesamt, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
+                        </td>
+                        <td colSpan={3} />
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Tab: Nach Datum ── */}
         {activeTab === "datum" && (
           <Card>
             <CardHeader>
@@ -330,7 +498,7 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
           </Card>
         )}
 
-        {/* Tab: Nach Fahrzeug */}
+        {/* ── Tab: Nach Fahrzeug ── */}
         {activeTab === "kennzeichen" && (
           <Card>
             <CardHeader>
@@ -347,7 +515,6 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
                 <div className="divide-y divide-gray-100">
                   {byKennzeichen.map(({ groupKey, plate, raw, resolved, positionen: pos, netto }) => (
                     <div key={groupKey}>
-                      {/* Summary row — clickable to expand */}
                       <button
                         className="w-full flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
                         onClick={() => setExpandedKennzeichen(expandedKennzeichen === groupKey ? null : groupKey)}
@@ -362,8 +529,6 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
                         <span className="ml-auto font-mono font-semibold text-gray-900">{formatEur(netto)}</span>
                         <span className="text-gray-400 text-xs">{expandedKennzeichen === groupKey ? "▲" : "▼"}</span>
                       </button>
-
-                      {/* Expanded detail rows */}
                       {expandedKennzeichen === groupKey && (
                         <div className="bg-gray-50 border-t border-gray-100">
                           <table className="w-full text-sm">
@@ -392,8 +557,6 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
                       )}
                     </div>
                   ))}
-
-                  {/* Grand total */}
                   <div className="flex items-center gap-4 px-4 py-3 bg-gray-50 border-t-2 border-gray-200">
                     <span className="text-sm font-semibold text-gray-700">Gesamt</span>
                     <span className="ml-auto font-mono font-bold text-gray-900">
@@ -406,81 +569,175 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap
             </CardContent>
           </Card>
         )}
+      </div>
 
-        {/* Tab: Gutschriften */}
-        {activeTab === "gutschriften" && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Euro className="w-4 h-4" />
-                Gutschriften
-                <Badge className="ml-2">{filteredGutschriften.length}</Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {filteredGutschriften.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-sm">Keine Gutschriften gefunden.</div>
+      {/* ── Reconciliation Modal ── */}
+      {reconcileModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col">
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+                  <GitMerge className="w-4 h-4 text-blue-600" />
+                  Abgleich: {reconcileModal.gutschrift.gutschrift_nr ?? "Gutschrift"}
+                </h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {reconcileModal.gutschrift.absender} ·{" "}
+                  {reconcileModal.gutschrift.period_from && reconcileModal.gutschrift.period_to
+                    ? `${formatDate(reconcileModal.gutschrift.period_from)} – ${formatDate(reconcileModal.gutschrift.period_to)}`
+                    : formatDate(reconcileModal.gutschrift.document_date)}
+                </p>
+              </div>
+              <button
+                onClick={() => { setReconcileModal(null); window.location.reload(); }}
+                className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Summary table */}
+            <div className="overflow-auto flex-1 p-6 space-y-4">
+              {/* Overall status banner */}
+              {reconcileModal.results.every(r => r.match_status === "matched") ? (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm font-medium">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  Alle Fahrzeuge vollständig abgeglichen — keine Konflikte.
+                </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-gray-100 bg-gray-50">
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Datum</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Absender</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Gutschrift-Nr.</th>
-                        <th className="text-right px-4 py-3 font-semibold text-gray-600">Netto</th>
-                        <th className="text-right px-4 py-3 font-semibold text-gray-600">MwSt</th>
-                        <th className="text-right px-4 py-3 font-semibold text-gray-600">Brutto</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Dateiname</th>
-                        <th className="px-4 py-3"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredGutschriften.map((g) => (
-                        <tr key={g.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 text-gray-700">{formatDate(g.document_date)}</td>
-                          <td className="px-4 py-3 text-gray-800 font-medium max-w-[180px] truncate">{g.absender ?? "–"}</td>
-                          <td className="px-4 py-3 text-gray-600">{g.gutschrift_nr ?? "–"}</td>
-                          {(() => {
-                            const inv = !!invertMap[normalizeAbsender(g.absender ?? "")];
-                            return (<>
-                              <td className="px-4 py-3 text-right font-mono text-gray-800">{formatEur(applyInvert(g.netto_gesamt, inv))}</td>
-                              <td className="px-4 py-3 text-right font-mono text-gray-600">{formatEur(applyInvert(g.mwst, inv))}</td>
-                              <td className="px-4 py-3 text-right font-mono font-semibold text-gray-900">{formatEur(applyInvert(g.brutto_gesamt, inv))}</td>
-                            </>);
-                          })()}
-                          <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate">{g.file_name ?? "–"}</td>
-                          <td className="px-4 py-3">
-                            <button onClick={() => handleDelete(g.id)}
-                              className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Löschen">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-gray-200 bg-gray-50">
-                        <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700">Gesamt</td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
-                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.netto_gesamt, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">
-                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.mwst, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
-                        </td>
-                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
-                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.brutto_gesamt, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
-                        </td>
-                        <td colSpan={2} />
-                      </tr>
-                    </tfoot>
-                  </table>
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm font-medium">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  {reconcileModal.results.filter(r => r.match_status === "conflict").length} Fahrzeug(e) mit Differenz — bitte prüfen.
                 </div>
               )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+
+              {/* Per-vehicle rows */}
+              <div className="border rounded-xl overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 border-b text-left">
+                      <th className="px-4 py-2.5 font-semibold text-gray-600 w-6"></th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600">Fahrzeug</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600 text-center">Gutschrift</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600 text-center">Dispo</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600 text-center">Differenz</th>
+                      <th className="px-4 py-2.5 font-semibold text-gray-600 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {reconcileModal.results.map((r) => {
+                      const diff = r.days_found - r.days_claimed;
+                      const isExpanded = expandedVehicle === r.license_plate;
+                      return (
+                        <>
+                          <tr
+                            key={r.license_plate}
+                            className={cn(
+                              "hover:bg-gray-50 cursor-pointer transition-colors",
+                              r.tours.length > 0 && "cursor-pointer"
+                            )}
+                            onClick={() => r.tours.length > 0 && setExpandedVehicle(isExpanded ? null : r.license_plate)}
+                          >
+                            <td className="px-3 py-3 text-gray-400">
+                              {r.tours.length > 0
+                                ? (isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />)
+                                : null}
+                            </td>
+                            <td className="px-4 py-3 font-mono font-medium text-gray-900">{r.license_plate}</td>
+                            <td className="px-4 py-3 text-center text-gray-700">{r.days_claimed} Tage</td>
+                            <td className="px-4 py-3 text-center text-gray-700">{r.days_found} Tage</td>
+                            <td className="px-4 py-3 text-center">
+                              {diff === 0 ? (
+                                <span className="text-gray-400">–</span>
+                              ) : (
+                                <span className={cn("font-semibold", diff > 0 ? "text-blue-600" : "text-red-600")}>
+                                  {diff > 0 ? `+${diff}` : diff}
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {r.match_status === "matched" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                                  <CheckCircle className="w-3 h-3" /> OK
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
+                                  <AlertTriangle className="w-3 h-3" /> Konflikt
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                          {/* Expanded tour list */}
+                          {isExpanded && (
+                            <tr key={`${r.license_plate}-detail`}>
+                              <td colSpan={6} className="px-0 py-0">
+                                <div className="bg-gray-50 border-t border-gray-100 px-8 py-3">
+                                  <p className="text-xs font-semibold text-gray-500 mb-2">Touren in der Dispo ({r.tours.length}):</p>
+                                  <div className="space-y-1">
+                                    {r.tours.map((t, idx) => (
+                                      <div key={t.id} className={cn(
+                                        "flex items-center gap-3 text-xs px-3 py-1.5 rounded-lg",
+                                        idx < r.days_claimed ? "bg-green-50 text-green-800" : "bg-orange-50 text-orange-800"
+                                      )}>
+                                        <span className="font-medium">{formatDate(t.tour_date)}</span>
+                                        {t.driver && (
+                                          <span className="text-gray-600">{t.driver.first_name} {t.driver.last_name}</span>
+                                        )}
+                                        {idx >= r.days_claimed && (
+                                          <span className="ml-auto font-medium">Überzählig (nicht in Gutschrift)</span>
+                                        )}
+                                      </div>
+                                    ))}
+                                    {r.days_claimed > r.days_found && (
+                                      Array.from({ length: r.days_claimed - r.days_found }, (_, i) => (
+                                        <div key={`missing-${i}`} className="flex items-center gap-3 text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-700">
+                                          <span className="font-medium">Fehlende Tour</span>
+                                          <span className="ml-auto">In Gutschrift berechnet, kein Eintrag in Dispo</span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Netto summary */}
+              <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-blue-700 font-medium">Netto zugeordnet</span>
+                  <span className="font-mono font-bold text-blue-900">
+                    {formatEur(reconcileModal.results.reduce((s, r) => {
+                      const entries = vehicleEntriesByGutschrift[reconcileModal.gutschrift.id] ?? [];
+                      const entry = entries.find(e => e.license_plate.replace(/-/g, " ").toUpperCase() === r.license_plate);
+                      const dieselPerDay = (entry?.days_claimed ?? 0) > 0 ? (entry?.diesel_amount ?? 0) / (entry?.days_claimed ?? 1) : 0;
+                      const nettoPerDay = (entry?.daily_rate ?? 0) + dieselPerDay;
+                      return s + nettoPerDay * Math.min(r.days_claimed, r.days_found);
+                    }, 0))}
+                  </span>
+                </div>
+                <p className="text-xs text-blue-600 mt-1">
+                  Nur vollständig gematchte Tage werden in der Auswertung berücksichtigt.
+                </p>
+              </div>
+            </div>
+
+            {/* Modal footer */}
+            <div className="px-6 py-4 border-t flex justify-end">
+              <Button onClick={() => { setReconcileModal(null); window.location.reload(); }}>
+                Schließen & aktualisieren
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

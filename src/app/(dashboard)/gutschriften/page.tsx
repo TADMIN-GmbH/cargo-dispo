@@ -16,7 +16,7 @@ const adminSupabase = createAdminClient(
 export default async function GutschriftenPage() {
   const supabase = await createClient();
 
-  const [{ data: positionen }, { data: gutschriften }, { data: aliases }, { data: customers }] = await Promise.all([
+  const [{ data: positionen }, { data: gutschriften }, { data: aliases }, { data: customers }, { data: vehicleEntries }] = await Promise.all([
     supabase
       .from("gutschrift_positionen")
       .select("*, gutschrift:gutschriften(id, gutschrift_nr, document_date, absender, file_name)")
@@ -31,6 +31,9 @@ export default async function GutschriftenPage() {
     adminSupabase
       .from("customers")
       .select("company_name, invert_gutschrift_sign"),
+    adminSupabase
+      .from("gutschrift_vehicle_entries")
+      .select("*"),
   ]);
 
   // Build alias lookup: normalized_absender → { alias → license_plate }
@@ -59,6 +62,7 @@ export default async function GutschriftenPage() {
       gutschriften={gutschriften ?? []}
       aliasMap={aliasMap}
       invertMap={invertMap}
+      vehicleEntries={vehicleEntries ?? []}
     />
   );
 }

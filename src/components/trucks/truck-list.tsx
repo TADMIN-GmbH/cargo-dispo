@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Truck, Plus, Search, Pencil, Trash2, SlidersHorizontal, Link2, X } from "lucide-react";
 
-const TOWING_TYPES = ["MW 12t", "MW 18t", "MW 26t", "SZM", "Transporter", "PKW"];
+const TOWING_TYPES = ["MW 12t", "MW 15t", "MW 18t", "MW 26t", "SZM", "Transporter", "PKW"];
 const TOWED_TYPES  = ["Auflieger", "Anhänger"];
 
 const statusConfig = {
@@ -48,6 +48,7 @@ const emptyVehicle = {
   registration_date: "",
   vin:               "",
   tire_size:         "",
+  km_class:          "" as string,
   status:            "available" as const,
   current_driver_id: "",
   length_m:          "" as string | number,
@@ -120,6 +121,7 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       registration_date: v.registration_date ?? "",
       vin:               v.vin               ?? "",
       tire_size:         v.tire_size         ?? "",
+      km_class:          (v as any).km_class ?? "",
       status:            v.status            as typeof emptyVehicle.status,
       current_driver_id: v.current_driver_id ?? "",
       length_m:          v.length_m          ?? ("" as string | number),
@@ -155,6 +157,7 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       registration_date: form.registration_date || null,
       vin:               form.vin               || null,
       tire_size:         form.tire_size         || null,
+      km_class:          form.km_class          || null,
       status:            form.status,
       current_driver_id: form.current_driver_id || null,
       length_m:          form.length_m  !== "" ? Number(form.length_m)  : null,
@@ -481,6 +484,7 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
                   <SelectTrigger><SelectValue placeholder="Typ wählen" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="MW 12t">MW 12t</SelectItem>
+                    <SelectItem value="MW 15t">MW 15t</SelectItem>
                     <SelectItem value="MW 18t">MW 18t</SelectItem>
                     <SelectItem value="MW 26t">MW 26t</SelectItem>
                     <SelectItem value="SZM">SZM</SelectItem>
@@ -525,6 +529,22 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
                 <Input placeholder="315/80 R22.5" value={form.tire_size} onChange={e => setForm({ ...form, tire_size: e.target.value })} />
               </div>
             </div>
+
+            {/* km_class – only for SZM */}
+            {form.type === "SZM" && (
+              <div className="space-y-1.5">
+                <Label>Km-Klasse (SZM)</Label>
+                <Select value={form.km_class || "none"} onValueChange={v => setForm({ ...form, km_class: v === "none" ? "" : v })}>
+                  <SelectTrigger><SelectValue placeholder="Nicht festgelegt" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nicht festgelegt</SelectItem>
+                    <SelectItem value="300km">300 km</SelectItem>
+                    <SelectItem value="450km">450 km</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-gray-400">Bestimmt die Abrechnungsklasse für SZM-Einsätze (fest pro Fahrzeug).</p>
+              </div>
+            )}
 
             {/* Maße & Nutzlast */}
             <div>

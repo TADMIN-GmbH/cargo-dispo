@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/rollkarte",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/diesel-price",
+      "schedule": "0 6 26 * *"
     }
   ]
 }
