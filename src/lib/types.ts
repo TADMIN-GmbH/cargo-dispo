@@ -53,6 +53,15 @@ export interface Driver {
   created_at: string;
 }
 
+export interface CustomerVehicleAlias {
+  id: string;
+  customer_id: string;
+  alias: string;
+  vehicle_id?: string;
+  vehicle?: Pick<Vehicle, "id" | "license_plate" | "type">;
+  created_at: string;
+}
+
 export interface Customer {
   id: string;
   company_name: string;
@@ -67,6 +76,7 @@ export interface Customer {
   rollkarte_prefix?: string;
   rollkarte_accepts_text?: boolean;
   vehicle_ref_label?: string;
+  vehicle_aliases?: CustomerVehicleAlias[];
   created_at: string;
 }
 

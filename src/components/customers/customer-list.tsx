@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Customer } from "@/lib/types";
+import { Customer, CustomerVehicleAlias, Vehicle } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, Hash } from "lucide-react";
+import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, Hash, ArrowLeftRight } from "lucide-react";
 
 const emptyCustomer = {
   company_name: "",
@@ -28,9 +28,10 @@ const emptyCustomer = {
 
 interface CustomerListProps {
   initialCustomers: Customer[];
+  vehicles: Pick<Vehicle, "id" | "license_plate" | "type">[];
 }
 
-export function CustomerList({ initialCustomers }: CustomerListProps) {
+export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) {
   const supabase = createClient();
   const [customers, setCustomers] = useState(initialCustomers);
   const [search, setSearch] = useState("");
@@ -40,6 +41,8 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [view, setView] = useState<"table" | "cards">("table");
+  const [aliases, setAliases] = useState<CustomerVehicleAlias[]>([]);
+  const [newAlias, setNewAlias] = useState({ alias: "", vehicle_id: "" });
 
   const filtered = customers.filter(
     (c) =>
@@ -51,11 +54,15 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
   function openCreate() {
     setEditing(null);
     setForm(emptyCustomer);
+    setAliases([]);
+    setNewAlias({ alias: "", vehicle_id: "" });
     setDialogOpen(true);
   }
 
   function openEdit(c: Customer) {
     setEditing(c);
+    setAliases(c.vehicle_aliases ?? []);
+    setNewAlias({ alias: "", vehicle_id: "" });
     setForm({
       company_name: c.company_name,
       contact_person: c.contact_person ?? "",
@@ -100,6 +107,24 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
 
     setSaving(false);
     setDialogOpen(false);
+  }
+
+  async function saveAlias() {
+    if (!editing || !newAlias.alias || !newAlias.vehicle_id) return;
+    const { data } = await supabase
+      .from("customer_vehicle_aliases")
+      .insert({ customer_id: editing.id, alias: newAlias.alias, vehicle_id: newAlias.vehicle_id })
+      .select("id, alias, vehicle_id, vehicle:vehicles(id, license_plate, type)")
+      .single();
+    if (data) {
+      setAliases((prev) => [...prev, data as unknown as CustomerVehicleAlias]);
+      setNewAlias({ alias: "", vehicle_id: "" });
+    }
+  }
+
+  async function deleteAlias(id: string) {
+    await supabase.from("customer_vehicle_aliases").delete().eq("id", id);
+    setAliases((prev) => prev.filter((a) => a.id !== id));
   }
 
   async function handleDelete(id: string) {
@@ -365,6 +390,66 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
                 Legt fest, wie die Fahrzeugreferenz in Gutschriften dieses Kunden bezeichnet wird (z.B. Kennzeichen oder interne LKW-Nummer).
               </p>
             </div>
+
+            {/* Vehicle alias mapping — only show when editing an existing customer and vehicle_ref_label is not "Kennzeichen" */}
+            {editing && form.vehicle_ref_label !== "Kennzeichen" && (
+              <div className="rounded-lg border border-gray-200 p-3 space-y-3 bg-gray-50">
+                <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5">
+                  <ArrowLeftRight className="w-3.5 h-3.5" /> {form.vehicle_ref_label} → Fahrzeug zuordnen
+                </p>
+
+                {/* existing aliases */}
+                {aliases.length > 0 && (
+                  <div className="space-y-1.5">
+                    {aliases.map((a) => {
+                      const v = vehicles.find((v) => v.id === a.vehicle_id);
+                      return (
+                        <div key={a.id} className="flex items-center gap-2 text-xs bg-white rounded border border-gray-200 px-2 py-1.5">
+                          <span className="font-mono font-semibold text-gray-700 min-w-[60px]">{a.alias}</span>
+                          <span className="text-gray-400">→</span>
+                          <span className="text-gray-700">{v ? `${v.license_plate}` : <span className="text-gray-400">–</span>}</span>
+                          <button onClick={() => deleteAlias(a.id)} className="ml-auto text-red-400 hover:text-red-600">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* add new alias row */}
+                <div className="flex gap-2 items-center">
+                  <Input
+                    placeholder={form.vehicle_ref_label + " z.B. 3803"}
+                    value={newAlias.alias}
+                    onChange={(e) => setNewAlias({ ...newAlias, alias: e.target.value })}
+                    className="h-8 text-xs flex-1"
+                  />
+                  <span className="text-gray-400 text-xs">→</span>
+                  <select
+                    value={newAlias.vehicle_id}
+                    onChange={(e) => setNewAlias({ ...newAlias, vehicle_id: e.target.value })}
+                    className="h-8 text-xs border border-gray-300 rounded-md px-2 flex-1 bg-white"
+                  >
+                    <option value="">Fahrzeug wählen</option>
+                    {vehicles.map((v) => (
+                      <option key={v.id} value={v.id}>{v.license_plate}</option>
+                    ))}
+                  </select>
+                  <Button
+                    size="sm"
+                    className="h-8 px-2"
+                    disabled={!newAlias.alias || !newAlias.vehicle_id}
+                    onClick={saveAlias}
+                  >
+                    <Plus className="w-3 h-3" />
+                  </Button>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  Zuordnungen werden sofort gespeichert und gelten für alle Gutschriften dieses Kunden.
+                </p>
+              </div>
+            )}
 
             <div className="flex gap-3 justify-end pt-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Abbrechen</Button>
