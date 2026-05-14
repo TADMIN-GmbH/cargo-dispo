@@ -800,7 +800,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                             const base = parseFloat(pricingForm.diesel_base_price) || 1.04;
                             const factor = parseFloat(pricingForm.diesel_factor) || 20;
                             const currentDieselBrutto = 1.7359;
-                            const dieselPct = (currentDieselBrutto - base) / base * 100 * factor / 100;
+                            const dieselPct = (currentDieselBrutto / 1.19 - base) / base * 100 * factor / 100;
                             const dieselAmt = rate * dieselPct / 100;
                             const total = rate + maut + dieselAmt;
                             return (

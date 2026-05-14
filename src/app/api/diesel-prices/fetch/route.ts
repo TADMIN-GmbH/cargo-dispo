@@ -40,7 +40,11 @@ export async function POST() {
         const raw = match[1] ?? match[0];
         // Normalize German decimal comma to dot
         const normalized = raw.replace(",", ".");
-        const parsed = parseFloat(normalized);
+        let parsed = parseFloat(normalized);
+        // en2x publishes prices per 100 Liter (e.g. 173,59 = 1,7359 €/L)
+        if (parsed > 100 && parsed < 350) {
+          parsed = Math.round(parsed) / 100;
+        }
         if (parsed > 1.0 && parsed < 3.5) {
           price_brutto = parsed;
           break;

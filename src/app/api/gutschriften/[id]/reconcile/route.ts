@@ -117,8 +117,10 @@ export async function POST(
     const dieselNetto = dieselMap.get(refMonth);
     if (dieselNetto === undefined) return null;
 
+    // Formula: (en2x_brutto / 1.19 - base_netto) / base_netto * factor
+    // diesel_base_price is stored as netto (1.04), diesel map contains brutto values
     const dieselSurchargePct =
-      ((dieselNetto - pm.diesel_base_price) / pm.diesel_base_price) * pm.diesel_factor;
+      ((dieselNetto / 1.19 - pm.diesel_base_price) / pm.diesel_base_price) * pm.diesel_factor;
     const dieselAmt = pm.daily_rate_netto * (dieselSurchargePct / 100);
     return Math.round((pm.daily_rate_netto + pm.maut_flat + dieselAmt) * 100) / 100;
   }
