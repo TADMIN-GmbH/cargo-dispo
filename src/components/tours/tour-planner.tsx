@@ -123,12 +123,29 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
 
     const joinQuery = "*, driver:drivers(id,first_name,last_name), vehicle:vehicles(id,license_plate,type), customer:customers(id,company_name,city), customer_location:customer_locations(id,name,city,contact_person)";
 
+    let savedId: string | null = null;
     if (editing) {
       const { data } = await supabase.from("tours").update(payload).eq("id", editing.id).select(joinQuery).single();
-      if (data) setTours((prev) => prev.map((t) => (t.id === editing.id ? data : t)));
+      if (data) { setTours((prev) => prev.map((t) => (t.id === editing.id ? data : t))); savedId = data.id; }
     } else {
       const { data } = await supabase.from("tours").insert(payload).select(joinQuery).single();
-      if (data) setTours((prev) => [data, ...prev]);
+      if (data) { setTours((prev) => [data, ...prev]); savedId = data.id; }
+    }
+
+    // Compute soll_netto for this tour in the background
+    if (savedId) {
+      fetch("/api/tours/compute-soll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tour_id: savedId }),
+      }).then((r) => r.json()).then((result) => {
+        if (result.updated > 0) {
+          // Refresh this tour's soll_netto in local state
+          supabase.from("tours").select("id, soll_netto").eq("id", savedId!).single().then(({ data }) => {
+            if (data) setTours((prev) => prev.map((t) => t.id === savedId ? { ...t, soll_netto: data.soll_netto } : t));
+          });
+        }
+      }).catch(() => {/* silent */});
     }
 
     setSaving(false);

@@ -6,12 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings, User, Lock, CheckCircle, MessageCircle } from "lucide-react";
+import { Settings, User, Lock, CheckCircle, MessageCircle, RefreshCw, Euro } from "lucide-react";
 
 interface SettingsViewProps {
   profile: { id: string; full_name: string; role: string; whatsapp_phone?: string };
   email: string;
 }
+
+type SollResult = { success: boolean; updated?: number; skipped?: number; total?: number; error?: string } | null;
 
 export function SettingsView({ profile, email }: SettingsViewProps) {
   const supabase = createClient();
@@ -25,6 +27,8 @@ export function SettingsView({ profile, email }: SettingsViewProps) {
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwError, setPwError] = useState("");
+  const [computingSoll, setComputingSoll] = useState(false);
+  const [sollResult, setSollResult] = useState<SollResult>(null);
 
   async function handleSaveProfile() {
     setSaving(true);
@@ -157,6 +161,53 @@ export function SettingsView({ profile, email }: SettingsViewProps) {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Soll-Berechnung */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Euro className="w-5 h-5" /> Soll-Berechnung Touren
+          </CardTitle>
+          <CardDescription>
+            Berechnet den Soll-Tagessatz für alle Touren ab 01.01.2026 neu – anhand der hinterlegten Preismodelle und Dieselpreise.
+            Nutzen nach Änderung eines Preismodells.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={async () => {
+                setComputingSoll(true);
+                setSollResult(null);
+                try {
+                  const res = await fetch("/api/tours/compute-soll", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ since: "2026-01-01" }),
+                  });
+                  const data = await res.json();
+                  setSollResult(data);
+                } catch {
+                  setSollResult({ success: false, error: "Netzwerkfehler" });
+                }
+                setComputingSoll(false);
+              }}
+              disabled={computingSoll}
+              variant="outline"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${computingSoll ? "animate-spin" : ""}`} />
+              {computingSoll ? "Wird berechnet…" : "Soll neu berechnen"}
+            </Button>
+          </div>
+          {sollResult && (
+            <div className={`rounded-md p-3 text-sm ${sollResult.success ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+              {sollResult.success
+                ? `✓ ${sollResult.updated} Touren aktualisiert, ${sollResult.skipped} ohne Preismodell (gesamt ${sollResult.total})`
+                : `Fehler: ${sollResult.error}`}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
