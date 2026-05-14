@@ -38,8 +38,8 @@ ALTER TABLE gutschrift_positionen ADD COLUMN IF NOT EXISTS soll_netto numeric;
 -- Prices used for billing with 2-month lag:
 -- March billing → January price, April billing → February price, etc.
 INSERT INTO diesel_prices (month, price_brutto, price_netto) VALUES
-  ('2025-11-01', 1.6890, ROUND(1.6890 / 1.19, 4)),
-  ('2025-12-01', 1.7010, ROUND(1.7010 / 1.19, 4)),
+  ('2025-11-01', 1.6515, ROUND(1.6515 / 1.19, 4)),
+  ('2025-12-01', 1.6111, ROUND(1.6111 / 1.19, 4)),
   ('2026-01-01', 1.7077, ROUND(1.7077 / 1.19, 4)),
   ('2026-02-01', 1.7359, ROUND(1.7359 / 1.19, 4)),
   ('2026-03-01', 2.1338, ROUND(2.1338 / 1.19, 4)),
