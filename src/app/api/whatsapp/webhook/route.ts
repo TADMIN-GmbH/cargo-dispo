@@ -178,9 +178,12 @@ export async function POST(request: NextRequest) {
 
     if (driverTours && driverTours.length > 0) {
       // Affirmative / negative helpers (used in multiple branches)
+      // NOTE: emoji (>U+FFFF) require the `u` flag — keep them in a separate regex
       const trimmedMsg = transcript.trim();
-      const isAffirmative = /^(ja\b|yes\b|richtig|korrekt|stimmt|ok\b|genau|jo\b|yep|jep|passt|super|alles klar|👍|👍🏻|👍🏼|👍🏽|👍🏾|👍🏿|✅|✓)/i.test(trimmedMsg);
-      const isNegative   = /^(nein\b|no\b|falsch|nö\b|nicht\b|wrong)/i.test(trimmedMsg);
+      const isAffirmative =
+        /^(ja\b|yes\b|richtig|korrekt|stimmt|ok\b|genau|jo\b|yep|jep|passt|super|alles\s*klar)/i.test(trimmedMsg) ||
+        /^[\u{1F44D}\u{2705}\u{2713}\u{1F64C}\u{1F44C}]/u.test(trimmedMsg); // 👍 ✅ ✓ 🙌 👌 (all skin-tones covered via base code point)
+      const isNegative = /^(nein\b|no\b|falsch|nö\b|nicht\b|wrong)/i.test(trimmedMsg);
 
       // --- Handle confirmation flow ---
       const confirmingTour = driverTours.find((t: any) => t.rollkarte_status === "confirming");
