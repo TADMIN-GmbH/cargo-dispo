@@ -20,13 +20,13 @@ export default async function GutschriftenPage() {
       .order("document_date", { ascending: false }),
     supabase
       .from("customer_vehicle_aliases")
-      .select("alias, vehicle:vehicles(license_plate), customer:customers(absender:company_name)"),
+      .select("alias, vehicle:vehicles(license_plate), customer:customers(company_name)"),
   ]);
 
   // Build lookup: normalized_absender → { alias → license_plate }
   const aliasMap: Record<string, Record<string, string>> = {};
   for (const a of aliases ?? []) {
-    const absender = (a.customer as any)?.absender as string | undefined;
+    const absender = (a.customer as any)?.company_name as string | undefined;
     const plate = (a.vehicle as any)?.license_plate as string | undefined;
     if (absender && a.alias && plate) {
       const key = normalize(absender);
