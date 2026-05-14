@@ -157,7 +157,8 @@ export function ActionRecommendations({
     {
       label: "Ist-km fehlt",
       icon: Route,
-      tours: tours.filter((t) => t.actual_km === null),
+      // Only flag missing actual_km for completed tours (not all tours — too noisy)
+      tours: tours.filter((t) => t.actual_km === null && t.status === "completed"),
     },
   ].filter((c) => c.tours.length > 0);
 
@@ -175,7 +176,7 @@ export function ActionRecommendations({
       {/* Summary stat bar */}
       <div className="flex flex-wrap gap-3 text-sm text-gray-600">
         <span className="px-3 py-1.5 bg-gray-100 rounded-lg font-medium">
-          Heute: <span className="font-bold text-gray-900">{toursOnDate}</span> Touren
+          Letzte 30 Tage: <span className="font-bold text-gray-900">{toursOnDate}</span> Touren
         </span>
         <span className="px-3 py-1.5 bg-blue-50 rounded-lg font-medium text-blue-700">
           <span className="font-bold">{driversOnTour}</span> Fahrer auf Tour
@@ -211,7 +212,7 @@ export function ActionRecommendations({
               <div>
                 <p className="font-semibold text-green-800">Alle Touren vollständig ✓</p>
                 <p className="text-sm text-green-600">
-                  Für {new Date(onTourDate + "T00:00:00").toLocaleDateString("de-DE")} sind keine offenen Punkte vorhanden.
+                  In den letzten 30 Tagen sind keine offenen Punkte vorhanden.
                 </p>
               </div>
             </div>

@@ -38,7 +38,7 @@ export default async function DashboardPage() {
       .select(
         "id, tour_date, status, driver_id, vehicle_id, customer_id, billing_ref, rollkarte_status, soll_netto, actual_km, driver:drivers(id,first_name,last_name), vehicle:vehicles(id,license_plate,type), customer:customers(id,company_name)"
       )
-      .eq("tour_date", today)
+      .gte("tour_date", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
       .neq("status", "cancelled"),
   ]);
 
