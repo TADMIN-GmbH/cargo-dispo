@@ -30,12 +30,19 @@ export interface Vehicle {
   created_at: string;
 }
 
+export interface PhoneHistoryEntry {
+  phone: string;
+  changed_at: string;
+  changed_by?: string;
+}
+
 export interface Driver {
   id: string;
   first_name: string;
   last_name: string;
   full_name?: string;
   phone?: string;
+  phone_history?: PhoneHistoryEntry[];
   license_class?: string;
   status: "available" | "on_tour" | "off" | "sick";
   current_vehicle_id?: string;

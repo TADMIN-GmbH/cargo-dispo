@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Users, Plus, Search, Pencil, Trash2, Phone, MessageCircle } from "lucide-react";
+import { Users, Plus, Search, Pencil, Trash2, Phone, MessageCircle, History } from "lucide-react";
 
 const statusConfig = {
   available: { label: "Verfügbar", variant: "success" as const },
@@ -77,10 +77,23 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
   async function handleSave() {
     setSaving(true);
     setSaveError("");
+
+    // Build phone history entry if number changed
+    let phoneHistory = editing?.phone_history ?? [];
+    const oldPhone = editing?.phone ?? null;
+    const newPhone = form.phone || null;
+    if (editing && oldPhone && oldPhone !== newPhone) {
+      phoneHistory = [
+        { phone: oldPhone, changed_at: new Date().toISOString() },
+        ...phoneHistory,
+      ].slice(0, 10); // keep last 10 entries
+    }
+
     const payload = {
       first_name: form.first_name,
       last_name: form.last_name,
-      phone: form.phone || null,
+      phone: newPhone,
+      phone_history: phoneHistory,
       license_class: form.license_class || null,
       status: form.status,
       current_vehicle_id: form.current_vehicle_id || null,
@@ -252,6 +265,24 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
               <div className="space-y-1.5">
                 <Label>Telefon</Label>
                 <Input placeholder="+49 40 ..." value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                {editing?.phone_history && editing.phone_history.length > 0 && (
+                  <details className="mt-1">
+                    <summary className="flex items-center gap-1 text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+                      <History className="w-3 h-3" />
+                      Verlauf ({editing.phone_history.length})
+                    </summary>
+                    <div className="mt-1.5 space-y-1">
+                      {editing.phone_history.map((entry, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs bg-gray-50 rounded px-2 py-1">
+                          <span className="font-mono text-gray-600">{entry.phone}</span>
+                          <span className="text-gray-400">
+                            {new Date(entry.changed_at).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Führerscheinklasse</Label>
