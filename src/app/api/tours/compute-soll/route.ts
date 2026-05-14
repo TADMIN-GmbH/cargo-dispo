@@ -89,7 +89,9 @@ export async function POST(req: NextRequest) {
       if (bglPrice === undefined) return null;
       const pct = bglSurchargePct(bglPrice);
       if (pct === null) return null;
-      surchargePct = pct;
+      // diesel_factor = % of BGL step to apply (100 = full, 80 = 80%)
+      const factor = pm.diesel_factor > 0 ? pm.diesel_factor : 100;
+      surchargePct = pct * (factor / 100);
     } else {
       const en2xBrutto = en2xMap.get(ref);
       if (en2xBrutto === undefined) return null;

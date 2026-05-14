@@ -154,12 +154,13 @@ export async function POST(
     let dieselSurchargePct: number;
 
     if (pm.floater_type === "table") {
-      // BGL step-table lookup
+      // BGL step-table lookup; diesel_factor = % of step to apply (100=full, 80=80%)
       const bglPrice = bglMap.get(ref);
       if (bglPrice === undefined) return null;
       const pct = bglSurchargePct(bglPrice);
       if (pct === null) return null;
-      dieselSurchargePct = pct;
+      const factor = pm.diesel_factor > 0 ? pm.diesel_factor : 100;
+      dieselSurchargePct = pct * (factor / 100);
     } else {
       // en2x continuous formula
       const en2xBrutto = en2xMap.get(ref);
