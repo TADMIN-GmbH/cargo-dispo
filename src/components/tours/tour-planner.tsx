@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { MapPin, Plus, Search, Pencil, Trash2, Filter, Hash } from "lucide-react";
+import { MapPin, Plus, Search, Pencil, Trash2, Filter, Hash, MessageCircle } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 
 const statusConfig = {
@@ -60,6 +60,8 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [rollkarteTourId, setRollkarteTourId] = useState<string | null>(null);
   const [rollkarteInput, setRollkarteInput] = useState("");
+  const [sendingRollkarte, setSendingRollkarte] = useState(false);
+  const [rollkarteResult, setRollkarteResult] = useState<string | null>(null);
 
   const filtered = tours.filter((t) => {
     const customer = (t as any).customer;
@@ -126,6 +128,24 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
     setDeleteId(null);
   }
 
+  async function triggerRollkarteRequests() {
+    setSendingRollkarte(true);
+    setRollkarteResult(null);
+    try {
+      const res = await fetch(`/api/rollkarte/trigger`, { method: "POST" });
+      const json = await res.json();
+      if (json.processed === 0) {
+        setRollkarteResult("Keine Fahrer mit aktiviertem WhatsApp-Rollkarte und ausstehender Nummer gefunden.");
+      } else {
+        const sent = json.results?.filter((r: any) => r.sent).length ?? 0;
+        setRollkarteResult(`✓ ${sent} von ${json.processed} WhatsApp-Nachrichten versendet.`);
+      }
+    } catch {
+      setRollkarteResult("Fehler beim Senden.");
+    }
+    setSendingRollkarte(false);
+  }
+
   async function saveRollkarte() {
     if (!rollkarteTourId) return;
     const num = rollkarteInput.trim();
@@ -148,10 +168,27 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
           </h1>
           <p className="text-gray-500 text-sm mt-1">{tours.length} Touren gesamt</p>
         </div>
-        <Button onClick={openCreate}>
-          <Plus className="w-4 h-4" />
-          Tour anlegen
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col items-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={triggerRollkarteRequests}
+              disabled={sendingRollkarte}
+              className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50"
+            >
+              <MessageCircle className="w-4 h-4" />
+              {sendingRollkarte ? "Wird gesendet…" : "Rollkarte anfragen"}
+            </Button>
+            {rollkarteResult && (
+              <p className="text-xs text-gray-500 mt-1">{rollkarteResult}</p>
+            )}
+          </div>
+          <Button onClick={openCreate}>
+            <Plus className="w-4 h-4" />
+            Tour anlegen
+          </Button>
+        </div>
       </div>
 
       <div className="flex gap-3 mb-6">
