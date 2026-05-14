@@ -23,6 +23,7 @@ const emptyCustomer = {
   notes: "",
   rollkarte_prefix: "",
   rollkarte_accepts_text: false,
+  vehicle_ref_label: "Kennzeichen",
 };
 
 interface CustomerListProps {
@@ -67,6 +68,7 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
       notes: c.notes ?? "",
       rollkarte_prefix: c.rollkarte_prefix ?? "",
       rollkarte_accepts_text: c.rollkarte_accepts_text ?? false,
+      vehicle_ref_label: c.vehicle_ref_label ?? "Kennzeichen",
     });
     setDialogOpen(true);
   }
@@ -85,6 +87,7 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
       notes: form.notes || null,
       rollkarte_prefix: form.rollkarte_prefix || null,
       rollkarte_accepts_text: form.rollkarte_accepts_text,
+      vehicle_ref_label: form.vehicle_ref_label || "Kennzeichen",
     };
 
     if (editing) {
@@ -337,6 +340,30 @@ export function CustomerList({ initialCustomers }: CustomerListProps) {
                   Der Fahrer kann als Rollkarte auch Orte oder Freitext schicken (z.B. "Werl, Ense, Soest"). Die gesamte Antwort wird gespeichert.
                 </p>
               )}
+            </div>
+
+            {/* Fahrzeugreferenz */}
+            <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50">
+              <p className="text-xs font-semibold text-gray-600">Fahrzeugreferenz in Gutschriften</p>
+              <div className="flex gap-2">
+                {["Kennzeichen", "LKW-Nr.", "Fahrzeug-ID"].map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setForm({ ...form, vehicle_ref_label: opt })}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                      form.vehicle_ref_label === opt
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Legt fest, wie die Fahrzeugreferenz in Gutschriften dieses Kunden bezeichnet wird (z.B. Kennzeichen oder interne LKW-Nummer).
+              </p>
             </div>
 
             <div className="flex gap-3 justify-end pt-2">

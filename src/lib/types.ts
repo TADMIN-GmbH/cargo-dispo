@@ -66,6 +66,7 @@ export interface Customer {
   notes?: string;
   rollkarte_prefix?: string;
   rollkarte_accepts_text?: boolean;
+  vehicle_ref_label?: string;
   created_at: string;
 }
 

@@ -206,7 +206,7 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50">
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Datum</th>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Kennzeichen</th>
+                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Fahrzeugreferenz</th>
                         <th className="text-right px-4 py-3 font-semibold text-gray-600">Netto (EUR)</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Gutschrift-Nr.</th>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Absender</th>
