@@ -27,6 +27,7 @@ const emptyCustomer = {
   price_daily_rate: undefined as number | undefined,
   price_diesel_pct: undefined as number | undefined,
   price_toll_flat: undefined as number | undefined,
+  invert_gutschrift_sign: false,
 };
 
 interface CustomerListProps {
@@ -85,6 +86,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
       price_daily_rate: c.price_daily_rate ?? undefined,
       price_diesel_pct: c.price_diesel_pct ?? undefined,
       price_toll_flat: c.price_toll_flat ?? undefined,
+      invert_gutschrift_sign: c.invert_gutschrift_sign ?? false,
     });
     setDialogOpen(true);
   }
@@ -107,6 +109,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
       price_daily_rate: form.price_daily_rate ?? null,
       price_diesel_pct: form.price_diesel_pct ?? null,
       price_toll_flat: form.price_toll_flat ?? null,
+      invert_gutschrift_sign: form.invert_gutschrift_sign,
     };
 
     if (editing) {
@@ -424,6 +427,23 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                   </div>
                   <p className="text-[11px] text-gray-400">
                     Legt fest, wie die Fahrzeugreferenz in Gutschriften dieses Kunden bezeichnet wird (z.B. Kennzeichen oder interne LKW-Nummer).
+                  </p>
+                </div>
+
+                {/* Gutschrift sign inversion */}
+                <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-600">Gutschrift-Beträge</p>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div
+                      onClick={() => setForm({ ...form, invert_gutschrift_sign: !form.invert_gutschrift_sign })}
+                      className={`relative w-9 h-5 rounded-full transition-colors ${form.invert_gutschrift_sign ? "bg-blue-600" : "bg-gray-300"}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.invert_gutschrift_sign ? "translate-x-4" : "translate-x-0"}`} />
+                    </div>
+                    <span className="text-xs text-gray-700">Beträge invertieren (negative → positiv)</span>
+                  </label>
+                  <p className="text-[11px] text-gray-400">
+                    Aktivieren wenn dieser Kunde Gutschriften mit negativem Vorzeichen ausstellt, die bei dir als Guthaben gelten.
                   </p>
                 </div>
 

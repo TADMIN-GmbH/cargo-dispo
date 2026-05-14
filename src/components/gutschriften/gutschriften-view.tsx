@@ -22,6 +22,7 @@ interface GutschriftenViewProps {
   positionen: PositionWithGutschrift[];
   gutschriften: Gutschrift[];
   aliasMap: Record<string, Record<string, string>>; // normalized_absender → { alias → license_plate }
+  invertMap: Record<string, boolean>; // normalized_absender → invert sign
 }
 
 function formatEur(val?: number | null): string {
@@ -48,7 +49,12 @@ function resolveKennzeichen(
   return { plate, raw, resolved: !!plate };
 }
 
-export function GutschriftenView({ positionen, gutschriften, aliasMap }: GutschriftenViewProps) {
+function applyInvert(val: number | null | undefined, invert: boolean): number | null {
+  if (val == null) return null;
+  return invert ? -val : val;
+}
+
+export function GutschriftenView({ positionen, gutschriften, aliasMap, invertMap }: GutschriftenViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("datum");
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -96,7 +102,7 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
       const groupKey = r.plate ?? raw;
       const existing = map.get(groupKey) ?? { plate: r.plate, raw, resolved: r.resolved, positionen: [], netto: 0 };
       existing.positionen.push(p);
-      existing.netto += p.netto_betrag ?? 0;
+      existing.netto += applyInvert(p.netto_betrag, !!invertMap[normalizeAbsender(p.gutschrift?.absender ?? "")]) ?? 0;
       map.set(groupKey, existing);
     });
     return Array.from(map.entries())
@@ -301,7 +307,7 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
                               );
                             })()}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono font-medium text-gray-800">{formatEur(pos.netto_betrag)}</td>
+                          <td className="px-4 py-3 text-right font-mono font-medium text-gray-800">{formatEur(applyInvert(pos.netto_betrag, !!invertMap[normalizeAbsender(pos.gutschrift?.absender ?? "")]))}</td>
                           <td className="px-4 py-3 text-gray-600">{pos.gutschrift?.gutschrift_nr ?? "–"}</td>
                           <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{pos.gutschrift?.absender ?? "–"}</td>
                           <td className="px-4 py-3 text-gray-500">{pos.tour_nr ?? "–"}</td>
@@ -312,7 +318,7 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
                       <tr className="border-t-2 border-gray-200 bg-gray-50">
                         <td colSpan={2} className="px-4 py-3 text-sm font-semibold text-gray-700">Gesamt</td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
-                          {formatEur(filteredPositionen.reduce((s, p) => s + (p.netto_betrag ?? 0), 0))}
+                          {formatEur(filteredPositionen.reduce((s, p) => s + (applyInvert(p.netto_betrag, !!invertMap[normalizeAbsender(p.gutschrift?.absender ?? "")]) ?? 0), 0))}
                         </td>
                         <td colSpan={3} />
                       </tr>
@@ -374,7 +380,7 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
                               {pos.sort((a, b) => (a.bel_datum ?? "").localeCompare(b.bel_datum ?? "")).map((p) => (
                                 <tr key={p.id} className="border-b border-gray-100 hover:bg-white transition-colors">
                                   <td className="px-8 py-2 text-gray-700">{formatDate(p.bel_datum)}</td>
-                                  <td className="px-4 py-2 text-right font-mono text-gray-800">{formatEur(p.netto_betrag)}</td>
+                                  <td className="px-4 py-2 text-right font-mono text-gray-800">{formatEur(applyInvert(p.netto_betrag, !!invertMap[normalizeAbsender(p.gutschrift?.absender ?? "")]))}</td>
                                   <td className="px-4 py-2 text-gray-600">{p.gutschrift?.gutschrift_nr ?? "–"}</td>
                                   <td className="px-4 py-2 text-gray-500 max-w-[180px] truncate">{p.gutschrift?.absender ?? "–"}</td>
                                   <td className="px-4 py-2 text-gray-500">{p.tour_nr ?? "–"}</td>
@@ -435,9 +441,14 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
                           <td className="px-4 py-3 text-gray-700">{formatDate(g.document_date)}</td>
                           <td className="px-4 py-3 text-gray-800 font-medium max-w-[180px] truncate">{g.absender ?? "–"}</td>
                           <td className="px-4 py-3 text-gray-600">{g.gutschrift_nr ?? "–"}</td>
-                          <td className="px-4 py-3 text-right font-mono text-gray-800">{formatEur(g.netto_gesamt)}</td>
-                          <td className="px-4 py-3 text-right font-mono text-gray-600">{formatEur(g.mwst)}</td>
-                          <td className="px-4 py-3 text-right font-mono font-semibold text-gray-900">{formatEur(g.brutto_gesamt)}</td>
+                          {(() => {
+                            const inv = !!invertMap[normalizeAbsender(g.absender ?? "")];
+                            return (<>
+                              <td className="px-4 py-3 text-right font-mono text-gray-800">{formatEur(applyInvert(g.netto_gesamt, inv))}</td>
+                              <td className="px-4 py-3 text-right font-mono text-gray-600">{formatEur(applyInvert(g.mwst, inv))}</td>
+                              <td className="px-4 py-3 text-right font-mono font-semibold text-gray-900">{formatEur(applyInvert(g.brutto_gesamt, inv))}</td>
+                            </>);
+                          })()}
                           <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate">{g.file_name ?? "–"}</td>
                           <td className="px-4 py-3">
                             <button onClick={() => handleDelete(g.id)}
@@ -452,13 +463,13 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
                       <tr className="border-t-2 border-gray-200 bg-gray-50">
                         <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700">Gesamt</td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
-                          {formatEur(filteredGutschriften.reduce((s, g) => s + (g.netto_gesamt ?? 0), 0))}
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.netto_gesamt, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
                         </td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">
-                          {formatEur(filteredGutschriften.reduce((s, g) => s + (g.mwst ?? 0), 0))}
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.mwst, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
                         </td>
                         <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
-                          {formatEur(filteredGutschriften.reduce((s, g) => s + (g.brutto_gesamt ?? 0), 0))}
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (applyInvert(g.brutto_gesamt, !!invertMap[normalizeAbsender(g.absender ?? "")]) ?? 0), 0))}
                         </td>
                         <td colSpan={2} />
                       </tr>

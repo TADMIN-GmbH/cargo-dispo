@@ -16,7 +16,7 @@ const adminSupabase = createAdminClient(
 export default async function GutschriftenPage() {
   const supabase = await createClient();
 
-  const [{ data: positionen }, { data: gutschriften }, { data: aliases }] = await Promise.all([
+  const [{ data: positionen }, { data: gutschriften }, { data: aliases }, { data: customers }] = await Promise.all([
     supabase
       .from("gutschrift_positionen")
       .select("*, gutschrift:gutschriften(id, gutschrift_nr, document_date, absender, file_name)")
@@ -28,9 +28,12 @@ export default async function GutschriftenPage() {
     adminSupabase
       .from("customer_vehicle_aliases")
       .select("alias, vehicle:vehicles(license_plate), customer:customers(company_name)"),
+    adminSupabase
+      .from("customers")
+      .select("company_name, invert_gutschrift_sign"),
   ]);
 
-  // Build lookup: normalized_absender → { alias → license_plate }
+  // Build alias lookup: normalized_absender → { alias → license_plate }
   const aliasMap: Record<string, Record<string, string>> = {};
   for (const a of aliases ?? []) {
     const absender = (a.customer as any)?.company_name as string | undefined;
@@ -42,11 +45,20 @@ export default async function GutschriftenPage() {
     }
   }
 
+  // Build invert lookup: normalized_absender → should_invert
+  const invertMap: Record<string, boolean> = {};
+  for (const c of customers ?? []) {
+    if (c.company_name && c.invert_gutschrift_sign) {
+      invertMap[normalize(c.company_name)] = true;
+    }
+  }
+
   return (
     <GutschriftenView
       positionen={positionen ?? []}
       gutschriften={gutschriften ?? []}
       aliasMap={aliasMap}
+      invertMap={invertMap}
     />
   );
 }

@@ -80,6 +80,7 @@ export interface Customer {
   price_daily_rate?: number;
   price_diesel_pct?: number;
   price_toll_flat?: number;
+  invert_gutschrift_sign?: boolean;
   created_at: string;
 }
 
