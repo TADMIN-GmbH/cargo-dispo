@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
   const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
-  const results: { driver: string; sent: boolean; error?: string }[] = [];
+  const results: { driver: string; phone: string; sent: boolean; sid?: string; skipped?: string; error?: string }[] = [];
 
   // Normalize phone to E.164 (+49...)
   function toE164(phone: string): string {
@@ -45,14 +45,23 @@ export async function POST(request: NextRequest) {
 
   for (const tour of (tours ?? []) as any[]) {
     const driver = tour.driver;
-    if (!driver?.phone || !driver?.rollkarte_whatsapp_enabled) continue;
+    const driverName = `${driver?.first_name ?? "?"} ${driver?.last_name ?? "?"}`;
+
+    if (!driver?.phone) {
+      results.push({ driver: driverName, phone: "(keine Nummer)", sent: false, skipped: "Keine Telefonnummer hinterlegt" });
+      continue;
+    }
+    if (!driver?.rollkarte_whatsapp_enabled) {
+      results.push({ driver: driverName, phone: driver.phone, sent: false, skipped: "WhatsApp Rollkarte nicht aktiviert" });
+      continue;
+    }
 
     const phone = toE164(driver.phone);
     const customerName = tour.customer?.company_name ?? "deinen Kunden";
     const message = getRollkarteRequestMessage(driver.first_name, customerName);
 
     try {
-      await client.messages.create({
+      const msg = await client.messages.create({
         from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
         to: `whatsapp:${phone}`,
         body: message,
@@ -61,9 +70,9 @@ export async function POST(request: NextRequest) {
         rollkarte_status: "requested",
         rollkarte_requested_at: new Date().toISOString(),
       }).eq("id", tour.id);
-      results.push({ driver: `${driver.first_name} ${driver.last_name}`, sent: true });
+      results.push({ driver: driverName, phone, sent: true, sid: msg.sid });
     } catch (err: any) {
-      results.push({ driver: `${driver.first_name} ${driver.last_name}`, sent: false, error: err.message });
+      results.push({ driver: driverName, phone, sent: false, error: err.message });
     }
   }
 

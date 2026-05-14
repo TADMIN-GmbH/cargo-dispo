@@ -134,11 +134,28 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
     try {
       const res = await fetch(`/api/rollkarte/trigger`, { method: "POST" });
       const json = await res.json();
-      if (json.processed === 0) {
-        setRollkarteResult("Keine Fahrer mit aktiviertem WhatsApp-Rollkarte und ausstehender Nummer gefunden.");
+      const allResults: any[] = json.results ?? [];
+      const sent = allResults.filter((r: any) => r.sent).length;
+      const skipped = allResults.filter((r: any) => r.skipped);
+      const failed = allResults.filter((r: any) => !r.sent && !r.skipped);
+
+      if (allResults.length === 0) {
+        setRollkarteResult("Keine ausstehenden Touren für heute gefunden.");
       } else {
-        const sent = json.results?.filter((r: any) => r.sent).length ?? 0;
-        setRollkarteResult(`✓ ${sent} von ${json.processed} WhatsApp-Nachrichten versendet.`);
+        const lines: string[] = [];
+        if (sent > 0) lines.push(`✓ ${sent} WhatsApp${sent > 1 ? "s" : ""} versendet`);
+        for (const r of allResults.filter((r: any) => r.sent)) {
+          lines.push(`  → ${r.driver} (${r.phone})`);
+        }
+        if (skipped.length > 0) {
+          lines.push(`⚠ ${skipped.length} übersprungen:`);
+          for (const r of skipped) lines.push(`  → ${r.driver}: ${r.skipped}`);
+        }
+        if (failed.length > 0) {
+          lines.push(`✗ ${failed.length} Fehler:`);
+          for (const r of failed) lines.push(`  → ${r.driver}: ${r.error}`);
+        }
+        setRollkarteResult(lines.join("\n"));
       }
     } catch {
       setRollkarteResult("Fehler beim Senden.");
@@ -181,7 +198,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
               {sendingRollkarte ? "Wird gesendet…" : "Rollkarte anfragen"}
             </Button>
             {rollkarteResult && (
-              <p className="text-xs text-gray-500 mt-1">{rollkarteResult}</p>
+              <pre className="text-xs text-gray-600 mt-1 whitespace-pre-wrap font-sans leading-relaxed">{rollkarteResult}</pre>
             )}
           </div>
           <Button onClick={openCreate}>
