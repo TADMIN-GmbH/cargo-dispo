@@ -21,22 +21,27 @@ const EXTRACTION_PROMPT = `Extrahiere alle Daten aus dieser Gutschrift (Kreditno
   "positionen": [
     {
       "bel_datum": "Belegdatum als YYYY-MM-DD oder null",
-      "kennzeichen": "Kennzeichen aus dem Tour-/SF-Feld, z.B. HAM-CK 508 (kommt nach der Nummer), oder null",
-      "tour_nr": "Tour-Nummer oder SF-NR. z.B. 10545296 oder 400027695, oder null",
+      "kennzeichen": "Fahrzeugreferenz als String oder null — siehe Regeln unten",
+      "tour_nr": "Tour-/Auftrags-/SF-Nummer als String oder null",
       "auftrag_nr": "Auftragsnummer oder null",
       "kg": Kilogramm als Zahl oder null,
-      "netto_betrag": Gesamtnettobetrag dieser Position (Summe aller Unterzeilen: Fracht + Dieselzuschlag - Mautzuschlag) als Zahl oder null
+      "netto_betrag": Gesamtnettobetrag dieser Position als Zahl oder null
     }
   ]
 }
 
 Regeln:
 - Deutsche Datumsangaben DD.MM.YYYY → YYYY-MM-DD umrechnen
-- Deutsche Zahlen mit Tausenderpunkt und Komma (1.234,56) → 1234.56
-- Die Spalte für die Tour-/Auftragsnummer kann verschiedene Bezeichnungen haben: "Tour", "Tour-Nr.", "SF-NR.", "Auftrag", "Beleg", "Lieferschein" o.ä. — immer die enthaltene Nummer in tour_nr übernehmen
-- Das Kennzeichen (Fahrzeugkennzeichen) steht oft im selben Feld wie die Tour-/SF-Nummer, NACH der Nummer, z.B. "10545296 HAM-CK 508" → tour_nr = "10545296", kennzeichen = "HAM-CK 508". Falls das Kennzeichen in einer eigenen Spalte steht, ebenfalls erfassen.
-- netto_betrag je Position = Fracht + Dieselzuschlag - |Mautzuschlag| (Mautzuschlag ist oft negativ)
-- Alle Positionen aus allen Seiten erfassen`;
+- Deutsche Zahlen 1.234,56 → 1234.56
+- Jede abrechenbare Einheit (pro Tag, pro Tour, pro LKW) ist eine separate Position
+- Die Fahrzeugreferenz (Feld "kennzeichen") kann auf verschiedene Arten erscheinen:
+  * Als Kennzeichen in einer Tabellenspalte oder im Tour-Feld NACH der Nummer: "10545296 HAM-CK 508" → kennzeichen = "HAM-CK 508"
+  * Als Abschnittsüberschrift mit LKW-Nummer: "LKW 3801 Tour: T5800577811" → kennzeichen = "3801", tour_nr = "T5800577811"
+  * Als "LKW XXXX" irgendwo in der Zeile → kennzeichen = "XXXX" (nur die Zahl)
+  * Als Kennzeichen in eigener Spalte → direkt übernehmen
+  * Als SF-NR., Lieferschein-Nr. o.ä. → in tour_nr eintragen
+- netto_betrag je Position = Summe aller Unterzeilen (Fracht + Dieselzuschlag - |Mautzuschlag| oder Abschnittssumme)
+- Alle Positionen aus ALLEN Seiten erfassen — keine auslassen`;
 
 export async function POST(req: NextRequest) {
   try {
