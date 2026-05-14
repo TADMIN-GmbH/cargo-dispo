@@ -232,7 +232,7 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
   }
 
   async function handleRestore(id: string) {
-    await supabase.from("vehicles").update({ archived_at: null }).eq("id", id);
+    await fetch("/api/archived", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table: "vehicles", id }) });
     setArchivedVehicles(prev => prev.filter(v => v.id !== id));
   }
 
@@ -242,12 +242,9 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       return;
     }
     setLoadingArchived(true);
-    const { data } = await supabase
-      .from("vehicles")
-      .select("*, current_driver:current_driver_id(id, first_name, last_name)")
-      .not("archived_at", "is", null)
-      .order("license_plate");
-    setArchivedVehicles((data ?? []) as Vehicle[]);
+    const res = await fetch("/api/archived?table=vehicles");
+    const data = await res.json();
+    setArchivedVehicles(Array.isArray(data) ? data : []);
     setLoadingArchived(false);
     setShowArchived(true);
   }

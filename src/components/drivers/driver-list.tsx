@@ -132,7 +132,7 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
   }
 
   async function handleRestore(id: string) {
-    await supabase.from("drivers").update({ archived_at: null }).eq("id", id);
+    await fetch("/api/archived", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table: "drivers", id }) });
     setArchivedDrivers((prev) => prev.filter((d) => d.id !== id));
   }
 
@@ -142,12 +142,9 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
       return;
     }
     setLoadingArchived(true);
-    const { data } = await supabase
-      .from("drivers")
-      .select("*, current_vehicle:vehicles(id,license_plate)")
-      .not("archived_at", "is", null)
-      .order("last_name");
-    setArchivedDrivers((data ?? []) as Driver[]);
+    const res = await fetch("/api/archived?table=drivers");
+    const data = await res.json();
+    setArchivedDrivers(Array.isArray(data) ? data : []);
     setLoadingArchived(false);
     setShowArchived(true);
   }

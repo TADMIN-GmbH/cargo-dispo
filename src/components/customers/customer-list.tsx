@@ -242,7 +242,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   }
 
   async function handleRestore(id: string) {
-    await supabase.from("customers").update({ archived_at: null }).eq("id", id);
+    await fetch("/api/archived", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ table: "customers", id }) });
     setArchivedCustomers((prev) => prev.filter((c) => c.id !== id));
   }
 
@@ -252,12 +252,9 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
       return;
     }
     setLoadingArchived(true);
-    const { data } = await supabase
-      .from("customers")
-      .select("id, company_name, contact_person, city, zip, phone, email, archived_at")
-      .not("archived_at", "is", null)
-      .order("company_name");
-    setArchivedCustomers((data ?? []) as unknown as Customer[]);
+    const res = await fetch("/api/archived?table=customers");
+    const data = await res.json();
+    setArchivedCustomers(Array.isArray(data) ? data : []);
     setLoadingArchived(false);
     setShowArchived(true);
   }
