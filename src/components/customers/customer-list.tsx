@@ -56,7 +56,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   const emptyPricingForm = { vehicle_type: "", km_class: "", daily_rate_netto: "", maut_flat: "0", accessory_flat: "0", diesel_base_price: "1.04", diesel_factor: "20", diesel_source: "en2x", diesel_lag_months: "2", floater_type: "formula", valid_from: new Date().toISOString().slice(0, 10), notes: "" };
   const [pricingForm, setPricingForm] = useState(emptyPricingForm);
   const [savingPricing, setSavingPricing] = useState(false);
-  const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "standorte" | "preismodell" | "preisformel">("stammdaten");
+  const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "standorte" | "preismodell">("stammdaten");
 
   const filtered = customers.filter(
     (c) =>
@@ -382,7 +382,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
 
           {/* Tab buttons */}
           <div className="flex border-b border-gray-200 -mx-6 px-6 mb-4 overflow-x-auto">
-            {(["stammdaten", "standorte", "einstellungen", "preismodell", "preisformel"] as const).map((t) => (
+            {(["stammdaten", "standorte", "einstellungen", "preismodell"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -894,76 +894,6 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
               </div>
             )}
 
-            {dialogTab === "preisformel" && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label>Tagespauschale (€)</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="510.00"
-                      value={form.price_daily_rate ?? ""}
-                      onChange={(e) => setForm({ ...form, price_daily_rate: e.target.value ? parseFloat(e.target.value) : undefined })}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Diesel-Zuschlag (%)</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      placeholder="8.5"
-                      value={form.price_diesel_pct ?? ""}
-                      onChange={(e) => setForm({ ...form, price_diesel_pct: e.target.value ? parseFloat(e.target.value) : undefined })}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Maut-Zuschlag (€/Tag, Pauschale)</Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="34.99"
-                    value={form.price_toll_flat ?? ""}
-                    onChange={(e) => setForm({ ...form, price_toll_flat: e.target.value ? parseFloat(e.target.value) : undefined })}
-                  />
-                </div>
-
-                {/* Live preview */}
-                {(form.price_daily_rate || form.price_diesel_pct || form.price_toll_flat) && (
-                  <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-2">
-                    <p className="text-xs font-semibold text-blue-700">Berechneter Tagespreis</p>
-                    <div className="text-xs text-blue-600 space-y-1">
-                      <div className="flex justify-between">
-                        <span>Tagespauschale</span>
-                        <span className="font-mono">{(form.price_daily_rate ?? 0).toFixed(2)} €</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Diesel ({form.price_diesel_pct ?? 0} %)</span>
-                        <span className="font-mono">+ {((form.price_daily_rate ?? 0) * (form.price_diesel_pct ?? 0) / 100).toFixed(2)} €</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Maut-Pauschale</span>
-                        <span className="font-mono">+ {(form.price_toll_flat ?? 0).toFixed(2)} €</span>
-                      </div>
-                      <div className="flex justify-between border-t border-blue-300 pt-1 font-bold text-blue-800">
-                        <span>Tagespreis gesamt</span>
-                        <span className="font-mono">
-                          {(
-                            (form.price_daily_rate ?? 0) +
-                            (form.price_daily_rate ?? 0) * (form.price_diesel_pct ?? 0) / 100 +
-                            (form.price_toll_flat ?? 0)
-                          ).toFixed(2)} €
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <p className="text-xs text-gray-400">
-                  Der Diesel-Zuschlag wird als Prozentsatz der Tagespauschale berechnet und kann monatlich angepasst werden.
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Always-visible action buttons */}
