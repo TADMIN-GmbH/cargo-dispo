@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Users, Plus, Search, Pencil, Trash2, Phone, MessageCircle, History } from "lucide-react";
+import { Users, Plus, Search, Pencil, Phone, MessageCircle, History, Archive, RotateCcw } from "lucide-react";
 
 const statusConfig = {
   available: { label: "Verfügbar", variant: "success" as const },
@@ -45,7 +45,9 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
   const [form, setForm] = useState(emptyDriver);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedDrivers, setArchivedDrivers] = useState<Driver[]>([]);
+  const [loadingArchived, setLoadingArchived] = useState(false);
 
   const filtered = drivers.filter(
     (d) =>
@@ -124,10 +126,34 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
     setDialogOpen(false);
   }
 
-  async function handleDelete(id: string) {
-    await supabase.from("drivers").delete().eq("id", id);
+  async function handleArchive(id: string) {
+    await supabase.from("drivers").update({ archived_at: new Date().toISOString() }).eq("id", id);
     setDrivers((prev) => prev.filter((d) => d.id !== id));
-    setDeleteId(null);
+  }
+
+  async function handleRestore(id: string) {
+    await supabase.from("drivers").update({ archived_at: null }).eq("id", id);
+    setArchivedDrivers((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  async function toggleArchived() {
+    if (showArchived) {
+      setShowArchived(false);
+      return;
+    }
+    setLoadingArchived(true);
+    const { data } = await supabase
+      .from("drivers")
+      .select("*, current_vehicle:vehicles(id,license_plate)")
+      .not("archived_at", "is", null)
+      .order("last_name");
+    setArchivedDrivers((data ?? []) as Driver[]);
+    setLoadingArchived(false);
+    setShowArchived(true);
+  }
+
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
   }
 
   return (
@@ -156,15 +182,29 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
         />
       </div>
 
-      <div className="flex gap-3 mb-6 flex-wrap">
-        {Object.entries(statusConfig).map(([key, cfg]) => (
-          <div key={key} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
-            <Badge variant={cfg.variant}>{cfg.label}</Badge>
-            <span className="text-sm font-semibold text-gray-700">
-              {drivers.filter((d) => d.status === key).length}
-            </span>
-          </div>
-        ))}
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div className="flex gap-3 flex-wrap">
+          {Object.entries(statusConfig).map(([key, cfg]) => (
+            <div key={key} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
+              <Badge variant={cfg.variant}>{cfg.label}</Badge>
+              <span className="text-sm font-semibold text-gray-700">
+                {drivers.filter((d) => d.status === key).length}
+              </span>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={toggleArchived}
+          disabled={loadingArchived}
+          className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${
+            showArchived
+              ? "bg-gray-200 border-gray-300 text-gray-700"
+              : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          <Archive className="w-3.5 h-3.5" />
+          {loadingArchived ? "Laden..." : showArchived ? "Archiv ausblenden" : "Archivierte anzeigen"}
+        </button>
       </div>
 
       <Card>
@@ -233,10 +273,11 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                              onClick={() => setDeleteId(d.id)}
+                              className="text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                              title="Archivieren"
+                              onClick={() => handleArchive(d.id)}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Archive className="w-4 h-4" />
                             </Button>
                           </div>
                         </td>
@@ -249,6 +290,67 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
           </div>
         </CardContent>
       </Card>
+
+      {/* Archived drivers section */}
+      {showArchived && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">
+            <Archive className="w-4 h-4" />
+            Archivierte Fahrer ({archivedDrivers.length})
+          </h2>
+          {archivedDrivers.length === 0 ? (
+            <p className="text-sm text-gray-400 italic">Keine archivierten Fahrer.</p>
+          ) : (
+            <Card className="opacity-75">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Name</th>
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Telefon</th>
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Führerschein</th>
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Archiviert am</th>
+                        <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Aktionen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {archivedDrivers.map((d) => (
+                        <tr key={d.id} className="bg-gray-50">
+                          <td className="px-6 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-semibold text-sm">
+                                {d.first_name[0]}{d.last_name[0]}
+                              </div>
+                              <span className="font-medium text-gray-500">{d.first_name} {d.last_name}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-3 text-sm text-gray-400">{d.phone || <span className="text-gray-300">–</span>}</td>
+                          <td className="px-6 py-3 text-sm text-gray-400 font-mono">{d.license_class || <span className="text-gray-300">–</span>}</td>
+                          <td className="px-6 py-3 text-sm text-gray-400">
+                            {(d as any).archived_at ? formatDate((d as any).archived_at) : "–"}
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-gray-500 hover:text-green-700 hover:bg-green-50 gap-1.5"
+                              onClick={() => handleRestore(d.id)}
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Wiederherstellen
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -363,17 +465,6 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
                 {saving ? "Speichern..." : editing ? "Aktualisieren" : "Hinzufügen"}
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Fahrer löschen?</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-600">Diese Aktion kann nicht rückgängig gemacht werden.</p>
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={() => setDeleteId(null)}>Abbrechen</Button>
-            <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)}>Löschen</Button>
           </div>
         </DialogContent>
       </Dialog>

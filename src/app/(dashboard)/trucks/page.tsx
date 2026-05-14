@@ -8,6 +8,7 @@ export default async function TrucksPage() {
     supabase
       .from("vehicles")
       .select("*, current_driver:current_driver_id(id, first_name, last_name)")
+      .is("archived_at", null)
       .order("license_plate"),
     supabase
       .from("drivers")

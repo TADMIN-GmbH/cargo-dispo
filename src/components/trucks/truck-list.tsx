@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Truck, Plus, Search, Pencil, Trash2, SlidersHorizontal, Link2, X } from "lucide-react";
+import { Truck, Plus, Search, Pencil, SlidersHorizontal, Link2, X, Archive, RotateCcw } from "lucide-react";
 
 const TOWING_TYPES = ["MW 12t", "MW 15t", "MW 18t", "MW 26t", "SZM", "Transporter", "PKW"];
 const TOWED_TYPES  = ["Auflieger", "Anhänger"];
@@ -73,11 +73,13 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
   const [form,              setForm]              = useState(emptyVehicle);
   const [saving,            setSaving]            = useState(false);
   const [saveError,         setSaveError]         = useState("");
-  const [deleteId,          setDeleteId]          = useState<string | null>(null);
   const [visibleCols,       setVisibleCols]       = useState<Set<ColKey>>(new Set(DEFAULT_VISIBLE));
   const [dialogDrivers,     setDialogDrivers]     = useState(availableDrivers);
   const [trailerIds,        setTrailerIds]        = useState<string[]>([]);
   const [originalTrailerIds,setOriginalTrailerIds]= useState<string[]>([]);
+  const [showArchived,      setShowArchived]      = useState(false);
+  const [archivedVehicles,  setArchivedVehicles]  = useState<Vehicle[]>([]);
+  const [loadingArchived,   setLoadingArchived]   = useState(false);
 
   function matchesSearch(v: Vehicle) {
     const q = search.toLowerCase();
@@ -221,14 +223,37 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
     setDialogOpen(false);
   }
 
-  async function handleDelete(id: string) {
-    await supabase.from("vehicles").update({ towing_vehicle_id: null }).eq("towing_vehicle_id", id);
-    await supabase.from("vehicles").delete().eq("id", id);
+  async function handleArchive(id: string) {
+    await supabase.from("vehicles").update({ archived_at: new Date().toISOString() }).eq("id", id);
     setVehicles(prev =>
       prev.filter(v => v.id !== id)
           .map(v => v.towing_vehicle_id === id ? { ...v, towing_vehicle_id: undefined } : v)
     );
-    setDeleteId(null);
+  }
+
+  async function handleRestore(id: string) {
+    await supabase.from("vehicles").update({ archived_at: null }).eq("id", id);
+    setArchivedVehicles(prev => prev.filter(v => v.id !== id));
+  }
+
+  async function toggleArchived() {
+    if (showArchived) {
+      setShowArchived(false);
+      return;
+    }
+    setLoadingArchived(true);
+    const { data } = await supabase
+      .from("vehicles")
+      .select("*, current_driver:current_driver_id(id, first_name, last_name)")
+      .not("archived_at", "is", null)
+      .order("license_plate");
+    setArchivedVehicles((data ?? []) as Vehicle[]);
+    setLoadingArchived(false);
+    setShowArchived(true);
+  }
+
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
   }
 
   const isTowing = TOWING_TYPES.includes(form.type);

@@ -1,14 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { cookies } from "next/headers";
 import { Truck, Users, Building2, MapPin, TrendingUp, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
+import { ActionRecommendations } from "@/components/dashboard/action-recommendations";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const adminSupabase = createAdminClient();
   const cookieStore = await cookies();
   const selectedDate = cookieStore.get("app_date")?.value ?? new Date().toISOString().split("T")[0];
+  const today = new Date().toISOString().split("T")[0];
 
   const [
     { count: vehicleCount },
@@ -17,6 +21,7 @@ export default async function DashboardPage() {
     { data: todayTours },
     { data: availableVehicles },
     { data: onTourDrivers },
+    { data: toursForRecommendations },
   ] = await Promise.all([
     supabase.from("vehicles").select("*", { count: "exact", head: true }),
     supabase.from("drivers").select("*", { count: "exact", head: true }),
@@ -28,9 +33,16 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false }),
     supabase.from("vehicles").select("id").eq("status", "available"),
     supabase.from("drivers").select("id").eq("status", "on_tour"),
+    adminSupabase
+      .from("tours")
+      .select(
+        "id, tour_date, status, driver_id, vehicle_id, customer_id, billing_ref, rollkarte_status, soll_netto, actual_km, driver:drivers(id,first_name,last_name), vehicle:vehicles(id,license_plate,type), customer:customers(id,company_name)"
+      )
+      .eq("tour_date", today)
+      .neq("status", "cancelled"),
   ]);
 
-  const today = new Date(selectedDate + "T00:00:00").toLocaleDateString("de-DE", {
+  const todayFormatted = new Date(selectedDate + "T00:00:00").toLocaleDateString("de-DE", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -92,7 +104,7 @@ export default async function DashboardPage() {
         <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-gray-500 mt-1 flex items-center gap-1.5">
           <Clock className="w-4 h-4" />
-          {today}
+          {todayFormatted}
         </p>
       </div>
 
@@ -207,6 +219,14 @@ export default async function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+      </div>
+
+      {/* Handlungsempfehlungen */}
+      <div className="mt-8">
+        <ActionRecommendations
+          tours={(toursForRecommendations ?? []) as any}
+          onTourDate={today}
+        />
       </div>
     </div>
   );
