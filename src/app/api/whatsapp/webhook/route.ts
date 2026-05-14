@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import twilio from "twilio";
 import OpenAI from "openai";
 import { createServerClient } from "@supabase/ssr";
+import { getRollkarteThankYouMessage } from "@/lib/rollkarte-messages";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -209,12 +210,14 @@ export async function POST(request: NextRequest) {
     const rollkarteNumber = rollkarteMatch[1];
     const today = new Date().toISOString().split("T")[0];
 
-    // Find the driver by phone number
+    // Find the driver by phone number — match E.164 or stored format
     const senderPhone = from.replace(/^whatsapp:/, "");
+    // Normalize sender to match DB format (try both +49... and 0...)
+    const senderNormalized = senderPhone.startsWith("+49") ? "0" + senderPhone.slice(3) : senderPhone;
     const { data: driver } = await supabase
       .from("drivers")
       .select("id, first_name, last_name")
-      .eq("phone", senderPhone)
+      .or(`phone.eq.${senderPhone},phone.eq.${senderNormalized}`)
       .maybeSingle();
 
     if (driver) {
@@ -236,7 +239,7 @@ export async function POST(request: NextRequest) {
           rollkarte_updated_by: `${driver.first_name} ${driver.last_name}`,
         }).eq("id", tour.id);
 
-        await sendReply(from, `✅ Rollkartennummer ${rollkarteNumber} für ${tour.customer?.company_name ?? "deine Tour"} gespeichert. Danke!`);
+        await sendReply(from, getRollkarteThankYouMessage(driver.first_name, rollkarteNumber));
         return new Response("OK", { status: 200 });
       } else if (pendingTours && pendingTours.length > 1) {
         // Ambiguous: multiple tours → store number on all, flag for manual review

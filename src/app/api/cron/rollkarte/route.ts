@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import twilio from "twilio";
 import { createServerClient } from "@supabase/ssr";
+import { getRollkarteRequestMessage } from "@/lib/rollkarte-messages";
 
 function toE164(phone: string): string {
   const digits = phone.replace(/\D/g, "");
@@ -43,11 +44,8 @@ export async function GET(request: NextRequest) {
     const driver = tour.driver;
     if (!driver?.phone || !driver?.rollkarte_whatsapp_enabled) continue;
 
-    const customerName = tour.customer?.company_name ?? "unbekannter Kunde";
-    const message =
-      `🚛 Cargo Köhler – Rollkartennummer benötigt\n\n` +
-      `Hallo ${driver.first_name}, für deine heutige Tour (${customerName}) wird die Rollkartennummer gebraucht.\n\n` +
-      `Bitte antworte mit der Nummer, z.B.:\nRollkarte 12345`;
+    const customerName = tour.customer?.company_name ?? "deinen Kunden";
+    const message = getRollkarteRequestMessage(driver.first_name, customerName);
 
     try {
       await client.messages.create({
