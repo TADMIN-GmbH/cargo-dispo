@@ -39,6 +39,7 @@ const emptyTour = {
   pickup_address: "",
   delivery_address: "",
   billing_ref: "",
+  actual_km: "" as string,
   notes: "",
 };
 
@@ -101,6 +102,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
       pickup_address: t.pickup_address ?? "",
       delivery_address: t.delivery_address ?? "",
       billing_ref: t.billing_ref ?? "",
+      actual_km: t.actual_km != null ? String(t.actual_km) : "",
       notes: t.notes ?? "",
     });
     setDialogOpen(true);
@@ -118,6 +120,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
       pickup_address: form.pickup_address || null,
       delivery_address: form.delivery_address || null,
       billing_ref: form.billing_ref || null,
+      actual_km: form.actual_km !== "" ? parseFloat(form.actual_km) : null,
       notes: form.notes || null,
     };
 
@@ -341,6 +344,9 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
                           {t.soll_netto != null
                             ? <span className="font-mono font-semibold text-emerald-700">{t.soll_netto.toFixed(2)} €</span>
                             : <span className="text-gray-300">–</span>}
+                          {t.actual_km != null
+                            ? <span className="block font-mono text-xs text-gray-400">{t.actual_km} km</span>
+                            : null}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -460,9 +466,15 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
               <Label>Lieferadresse</Label>
               <Input placeholder="Straße, PLZ Stadt" value={form.delivery_address} onChange={(e) => setForm({ ...form, delivery_address: e.target.value })} />
             </div>
-            <div className="space-y-1.5">
-              <Label>GU/RE-Nr.</Label>
-              <Input placeholder="z.B. GU-2026-001 oder RE-2026-042" value={form.billing_ref} onChange={(e) => setForm({ ...form, billing_ref: e.target.value })} />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <Label>GU/RE-Nr.</Label>
+                <Input placeholder="z.B. GU-2026-001 oder RE-2026-042" value={form.billing_ref} onChange={(e) => setForm({ ...form, billing_ref: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Ist-Kilometer</Label>
+                <Input type="number" step="1" min="0" placeholder="z.B. 285" value={form.actual_km} onChange={(e) => setForm({ ...form, actual_km: e.target.value })} />
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Notizen</Label>

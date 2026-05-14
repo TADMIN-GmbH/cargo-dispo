@@ -30,6 +30,7 @@ const emptyCustomer = {
   price_diesel_pct: undefined as number | undefined,
   price_toll_flat: undefined as number | undefined,
   invert_gutschrift_sign: false,
+  km_billing_type: "per_vehicle" as "per_vehicle" | "fleet",
 };
 
 interface CustomerListProps {
@@ -53,7 +54,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   const [locationForm, setLocationForm] = useState({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
   const [editingLocation, setEditingLocation] = useState<CustomerLocation | null>(null);
   const [pricingModels, setPricingModels] = useState<CustomerPricingModel[]>([]);
-  const emptyPricingForm = { vehicle_type: "", km_class: "", daily_rate_netto: "", maut_flat: "0", accessory_flat: "0", diesel_base_price: "1.04", diesel_factor: "20", diesel_source: "en2x", diesel_lag_months: "2", floater_type: "formula", valid_from: new Date().toISOString().slice(0, 10), notes: "" };
+  const emptyPricingForm = { vehicle_type: "", km_class: "", daily_rate_netto: "", maut_flat: "0", accessory_flat: "0", diesel_base_price: "1.04", diesel_factor: "20", diesel_source: "en2x", diesel_lag_months: "2", floater_type: "formula", free_km: "300", extra_km_rate: "0", valid_from: new Date().toISOString().slice(0, 10), notes: "" };
   const [pricingForm, setPricingForm] = useState(emptyPricingForm);
   const [savingPricing, setSavingPricing] = useState(false);
   const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "standorte" | "preismodell">("stammdaten");
@@ -108,6 +109,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
       price_diesel_pct: c.price_diesel_pct ?? undefined,
       price_toll_flat: c.price_toll_flat ?? undefined,
       invert_gutschrift_sign: c.invert_gutschrift_sign ?? false,
+      km_billing_type: (c.km_billing_type ?? "per_vehicle") as "per_vehicle" | "fleet",
     });
     setDialogOpen(true);
   }
@@ -131,6 +133,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
       price_diesel_pct: form.price_diesel_pct ?? null,
       price_toll_flat: form.price_toll_flat ?? null,
       invert_gutschrift_sign: form.invert_gutschrift_sign,
+      km_billing_type: form.km_billing_type,
     };
 
     if (editing) {
@@ -212,6 +215,8 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
         diesel_source: pricingForm.diesel_source,
         diesel_lag_months: parseInt(pricingForm.diesel_lag_months) || 2,
         floater_type: pricingForm.floater_type,
+        free_km: parseInt(pricingForm.free_km) || 300,
+        extra_km_rate: parseFloat(pricingForm.extra_km_rate) || 0,
         valid_from: pricingForm.valid_from,
         notes: pricingForm.notes || null,
       }),
@@ -634,6 +639,31 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                   </p>
                 </div>
 
+                {/* KM-Abrechnung */}
+                <div className="rounded-lg border border-gray-200 p-3 space-y-2 bg-gray-50">
+                  <p className="text-xs font-semibold text-gray-600">Kilometerabrechnung</p>
+                  <div className="flex gap-2">
+                    {(["per_vehicle", "fleet"] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setForm({ ...form, km_billing_type: opt })}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                          (form.km_billing_type ?? "per_vehicle") === opt
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-gray-600 border-gray-300 hover:bg-gray-100"
+                        }`}
+                      >
+                        {opt === "per_vehicle" ? "Pro Fahrzeug" : "Flotte (Pool)"}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    <strong>Pro Fahrzeug:</strong> Freikilometer und Mehrkilometer werden je Fahrzeug einzeln berechnet.<br />
+                    <strong>Flotte (Pool):</strong> Freikilometer aller Fahrzeuge werden zusammengefasst; Über- und Unterschreitungen werden verrechnet.
+                  </p>
+                </div>
+
                 {/* Vehicle alias mapping — only show when editing an existing customer and vehicle_ref_label is not "Kennzeichen" */}
                 {editing && form.vehicle_ref_label !== "Kennzeichen" && (
                   <div className="rounded-lg border border-gray-200 p-3 space-y-3 bg-gray-50">
@@ -733,6 +763,10 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                                         <span>Diesel-Basis: <strong>{m.diesel_base_price.toFixed(4)} €</strong></span>
                                         <span>Diesel-Faktor: <strong>{m.diesel_factor}%</strong></span>
                                       </>
+                                    )}
+                                    <span>Freikm: <strong>{m.free_km ?? 300} km/Tag</strong></span>
+                                    {(m.extra_km_rate ?? 0) > 0 && (
+                                      <span>Mehrkilometer: <strong>{(m.extra_km_rate ?? 0).toFixed(2)} €/km</strong></span>
                                     )}
                                   </div>
                                   {m.notes && <p className="text-xs text-gray-400 mt-1 italic">{m.notes}</p>}
@@ -838,6 +872,16 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                             BGL Stufentabelle: Zuschlag wird automatisch anhand des BGL-Preises für den Referenzmonat ermittelt.
                           </div>
                         )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Freikilometer / Tag</Label>
+                          <Input className="h-8 text-sm" type="number" step="1" placeholder="300" value={pricingForm.free_km} onChange={(e) => setPricingForm({ ...pricingForm, free_km: e.target.value })} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Mehrkilometer (€/km)</Label>
+                          <Input className="h-8 text-sm" type="number" step="0.01" placeholder="0.00" value={pricingForm.extra_km_rate} onChange={(e) => setPricingForm({ ...pricingForm, extra_km_rate: e.target.value })} />
+                        </div>
                       </div>
                       <div className="space-y-1">
                         <Label className="text-xs">Notizen</Label>

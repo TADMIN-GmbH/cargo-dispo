@@ -97,6 +97,7 @@ export interface Customer {
   price_diesel_pct?: number;
   price_toll_flat?: number;
   invert_gutschrift_sign?: boolean;
+  km_billing_type?: "per_vehicle" | "fleet";
   created_at: string;
 }
 
@@ -121,6 +122,7 @@ export interface Tour {
   rollkarte_updated_by?: string;
   billing_ref?: string;
   soll_netto?: number;
+  actual_km?: number | null;
   customer_location_id?: string;
   customer_location?: CustomerLocation;
   created_by?: string;
@@ -196,6 +198,8 @@ export interface CustomerPricingModel {
   diesel_source: string;    // "en2x" | "bgl"
   diesel_lag_months: number; // 1 or 2
   floater_type: string;     // "formula" | "table"
+  free_km: number;          // km included per day before extra charge kicks in
+  extra_km_rate: number;    // €/km for km beyond free_km
   valid_from: string;
   notes?: string;
   created_at: string;

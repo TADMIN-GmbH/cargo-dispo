@@ -45,6 +45,8 @@ export async function POST(
       diesel_source: body.diesel_source ?? "en2x",
       diesel_lag_months: body.diesel_lag_months ?? 2,
       floater_type: body.floater_type ?? "formula",
+      free_km: body.free_km ?? 300,
+      extra_km_rate: body.extra_km_rate ?? 0,
       valid_from: body.valid_from,
       notes: body.notes ?? null,
     })
