@@ -40,7 +40,6 @@ export default async function GutschriftenPage() {
       positionen={positionen ?? []}
       gutschriften={gutschriften ?? []}
       aliasMap={aliasMap}
-      normalizeAbsender={normalize}
     />
   );
 }

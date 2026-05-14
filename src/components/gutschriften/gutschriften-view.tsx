@@ -13,11 +13,15 @@ type PositionWithGutschrift = GutschriftPosition & {
   gutschrift?: Pick<Gutschrift, "id" | "gutschrift_nr" | "document_date" | "absender" | "file_name"> | null;
 };
 
+// Must match the normalize function in gutschriften/page.tsx
+function normalizeAbsender(s: string) {
+  return s.toLowerCase().replace(/[\s\-&.,]/g, "").replace(/gmbh|cokg|co\.kg|gmbh&co|&co/g, "");
+}
+
 interface GutschriftenViewProps {
   positionen: PositionWithGutschrift[];
   gutschriften: Gutschrift[];
   aliasMap: Record<string, Record<string, string>>; // normalized_absender → { alias → license_plate }
-  normalizeAbsender: (s: string) => string;
 }
 
 function formatEur(val?: number | null): string {
@@ -44,7 +48,7 @@ function resolveKennzeichen(
   return { plate, raw, resolved: !!plate };
 }
 
-export function GutschriftenView({ positionen, gutschriften, aliasMap, normalizeAbsender }: GutschriftenViewProps) {
+export function GutschriftenView({ positionen, gutschriften, aliasMap }: GutschriftenViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("datum");
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
