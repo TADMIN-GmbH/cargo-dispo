@@ -364,10 +364,11 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
             </Button>
             <Button
               variant="ghost" size="icon"
-              className="text-red-500 hover:text-red-700 hover:bg-red-50"
-              onClick={() => setDeleteId(v.id)}
+              className="text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              title="Archivieren"
+              onClick={() => handleArchive(v.id)}
             >
-              <Trash2 className="w-4 h-4" />
+              <Archive className="w-4 h-4" />
             </Button>
           </div>
         </td>
@@ -463,15 +464,29 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       </div>
 
       {/* Status summary */}
-      <div className="flex gap-3 mb-6 flex-wrap">
-        {Object.entries(statusConfig).map(([key, cfg]) => (
-          <div key={key} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
-            <Badge variant={cfg.variant}>{cfg.label}</Badge>
-            <span className="text-sm font-semibold text-gray-700">
-              {vehicles.filter(v => v.status === key).length}
-            </span>
-          </div>
-        ))}
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
+        <div className="flex gap-3 flex-wrap">
+          {Object.entries(statusConfig).map(([key, cfg]) => (
+            <div key={key} className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
+              <Badge variant={cfg.variant}>{cfg.label}</Badge>
+              <span className="text-sm font-semibold text-gray-700">
+                {vehicles.filter(v => v.status === key).length}
+              </span>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={toggleArchived}
+          disabled={loadingArchived}
+          className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${
+            showArchived
+              ? "bg-gray-200 border-gray-300 text-gray-700"
+              : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          <Archive className="w-3.5 h-3.5" />
+          {loadingArchived ? "Laden..." : showArchived ? "Archiv ausblenden" : "Archivierte anzeigen"}
+        </button>
       </div>
 
       {/* Ziehende Einheiten */}
@@ -708,17 +723,62 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
-      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Fahrzeug löschen?</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-600">Diese Aktion kann nicht rückgängig gemacht werden.</p>
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={() => setDeleteId(null)}>Abbrechen</Button>
-            <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)}>Löschen</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Archived vehicles section */}
+      {showArchived && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">
+            <Archive className="w-4 h-4" />
+            Archivierte Fahrzeuge ({archivedVehicles.length})
+          </h2>
+          {archivedVehicles.length === 0 ? (
+            <p className="text-sm text-gray-400 italic">Keine archivierten Fahrzeuge.</p>
+          ) : (
+            <Card className="opacity-75">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Kennzeichen</th>
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Typ / Marke</th>
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Archiviert am</th>
+                        <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Aktionen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {archivedVehicles.map((v) => (
+                        <tr key={v.id} className="bg-gray-50">
+                          <td className="px-6 py-3">
+                            <span className="font-mono font-semibold text-gray-500">{v.license_plate}</span>
+                          </td>
+                          <td className="px-6 py-3 text-sm text-gray-400">
+                            {v.type && <span className="font-medium">{v.type}</span>}
+                            {v.brand && <span className="text-gray-300"> · {v.brand}{v.model ? ` ${v.model}` : ""}</span>}
+                          </td>
+                          <td className="px-6 py-3 text-sm text-gray-400">
+                            {(v as any).archived_at ? formatDate((v as any).archived_at) : "–"}
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-gray-500 hover:text-green-700 hover:bg-green-50 gap-1.5"
+                              onClick={() => handleRestore(v.id)}
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Wiederherstellen
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 }

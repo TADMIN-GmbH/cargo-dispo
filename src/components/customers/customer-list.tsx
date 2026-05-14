@@ -10,7 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, Hash, ArrowLeftRight, Navigation } from "lucide-react";
+import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, Hash, ArrowLeftRight, Navigation, Archive, RotateCcw } from "lucide-react";
 import { CustomerLocation } from "@/lib/types";
 
 const emptyCustomer = {
@@ -46,8 +46,10 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   const [editing, setEditing] = useState<Customer | null>(null);
   const [form, setForm] = useState(emptyCustomer);
   const [saving, setSaving] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [view, setView] = useState<"table" | "cards">("table");
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedCustomers, setArchivedCustomers] = useState<Customer[]>([]);
+  const [loadingArchived, setLoadingArchived] = useState(false);
   const [aliases, setAliases] = useState<CustomerVehicleAlias[]>([]);
   const [newAlias, setNewAlias] = useState({ alias: "", vehicle_id: "" });
   const [locations, setLocations] = useState<CustomerLocation[]>([]);
@@ -234,10 +236,34 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
     setPricingModels((prev) => prev.filter((m) => m.id !== id));
   }
 
-  async function handleDelete(id: string) {
-    await supabase.from("customers").delete().eq("id", id);
+  async function handleArchive(id: string) {
+    await supabase.from("customers").update({ archived_at: new Date().toISOString() }).eq("id", id);
     setCustomers((prev) => prev.filter((c) => c.id !== id));
-    setDeleteId(null);
+  }
+
+  async function handleRestore(id: string) {
+    await supabase.from("customers").update({ archived_at: null }).eq("id", id);
+    setArchivedCustomers((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  async function toggleArchived() {
+    if (showArchived) {
+      setShowArchived(false);
+      return;
+    }
+    setLoadingArchived(true);
+    const { data } = await supabase
+      .from("customers")
+      .select("id, company_name, contact_person, city, zip, phone, email, archived_at")
+      .not("archived_at", "is", null)
+      .order("company_name");
+    setArchivedCustomers((data ?? []) as unknown as Customer[]);
+    setLoadingArchived(false);
+    setShowArchived(true);
+  }
+
+  function formatDate(iso: string) {
+    return new Date(iso).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
   }
 
   return (
@@ -256,7 +282,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
         </Button>
       </div>
 
-      <div className="flex gap-3 mb-6">
+      <div className="flex gap-3 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
@@ -280,6 +306,21 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
             Karten
           </button>
         </div>
+      </div>
+
+      <div className="flex justify-end mb-6">
+        <button
+          onClick={toggleArchived}
+          disabled={loadingArchived}
+          className={`text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg border transition-colors ${
+            showArchived
+              ? "bg-gray-200 border-gray-300 text-gray-700"
+              : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+          }`}
+        >
+          <Archive className="w-3.5 h-3.5" />
+          {loadingArchived ? "Laden..." : showArchived ? "Archiv ausblenden" : "Archivierte anzeigen"}
+        </button>
       </div>
 
       {view === "table" ? (
@@ -330,8 +371,14 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                             <Button variant="ghost" size="icon" onClick={() => openEdit(c)}>
                               <Pencil className="w-4 h-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => setDeleteId(c.id)}>
-                              <Trash2 className="w-4 h-4" />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                              title="Archivieren"
+                              onClick={() => handleArchive(c.id)}
+                            >
+                              <Archive className="w-4 h-4" />
                             </Button>
                           </div>
                         </td>
@@ -362,8 +409,14 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}>
                       <Pencil className="w-3 h-3" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => setDeleteId(c.id)}>
-                      <Trash2 className="w-3 h-3" />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-gray-400 hover:text-gray-600"
+                      title="Archivieren"
+                      onClick={() => handleArchive(c.id)}
+                    >
+                      <Archive className="w-3 h-3" />
                     </Button>
                   </div>
                 </div>
@@ -950,16 +1003,66 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Kunde löschen?</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-600">Diese Aktion kann nicht rückgängig gemacht werden.</p>
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={() => setDeleteId(null)}>Abbrechen</Button>
-            <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)}>Löschen</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Archived customers section */}
+      {showArchived && (
+        <div className="mt-6">
+          <h2 className="text-sm font-semibold text-gray-500 mb-3 flex items-center gap-2">
+            <Archive className="w-4 h-4" />
+            Archivierte Kunden ({archivedCustomers.length})
+          </h2>
+          {archivedCustomers.length === 0 ? (
+            <p className="text-sm text-gray-400 italic">Keine archivierten Kunden.</p>
+          ) : (
+            <Card className="opacity-75">
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Firma</th>
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Stadt</th>
+                        <th className="text-left text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Archiviert am</th>
+                        <th className="text-right text-xs font-semibold text-gray-400 uppercase tracking-wider px-6 py-3">Aktionen</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {archivedCustomers.map((c) => (
+                        <tr key={c.id} className="bg-gray-50">
+                          <td className="px-6 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-gray-200 flex items-center justify-center text-gray-500 font-bold text-sm">
+                                {c.company_name[0]}
+                              </div>
+                              <span className="font-medium text-gray-500">{c.company_name}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-3 text-sm text-gray-400">
+                            {c.city ? `${c.zip} ${c.city}` : <span className="text-gray-300">–</span>}
+                          </td>
+                          <td className="px-6 py-3 text-sm text-gray-400">
+                            {(c as any).archived_at ? formatDate((c as any).archived_at) : "–"}
+                          </td>
+                          <td className="px-6 py-3 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-gray-500 hover:text-green-700 hover:bg-green-50 gap-1.5"
+                              onClick={() => handleRestore(c.id)}
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                              Wiederherstellen
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
     </div>
   );
 }
