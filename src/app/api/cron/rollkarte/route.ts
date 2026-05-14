@@ -1,6 +1,13 @@
 import { NextRequest } from "next/server";
 import twilio from "twilio";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createServerClient } from "@supabase/ssr";
+
+function toE164(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("49")) return `+${digits}`;
+  if (digits.startsWith("0")) return `+49${digits.slice(1)}`;
+  return `+${digits}`;
+}
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -8,7 +15,11 @@ export async function GET(request: NextRequest) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const supabase = createAdminClient();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { cookies: { getAll: () => [], setAll: () => {} } }
+  );
   const today = new Date().toISOString().split("T")[0];
 
   // Tours today with an opted-in driver, phone present, no rollkarte yet
@@ -41,7 +52,7 @@ export async function GET(request: NextRequest) {
     try {
       await client.messages.create({
         from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
-        to: `whatsapp:${driver.phone}`,
+        to: `whatsapp:${toE164(driver.phone)}`,
         body: message,
       });
 

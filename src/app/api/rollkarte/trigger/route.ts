@@ -34,10 +34,19 @@ export async function POST(request: NextRequest) {
   const client = twilio(process.env.TWILIO_ACCOUNT_SID!, process.env.TWILIO_AUTH_TOKEN!);
   const results: { driver: string; sent: boolean; error?: string }[] = [];
 
+  // Normalize phone to E.164 (+49...)
+  function toE164(phone: string): string {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.startsWith("49")) return `+${digits}`;
+    if (digits.startsWith("0")) return `+49${digits.slice(1)}`;
+    return `+${digits}`;
+  }
+
   for (const tour of (tours ?? []) as any[]) {
     const driver = tour.driver;
     if (!driver?.phone || !driver?.rollkarte_whatsapp_enabled) continue;
 
+    const phone = toE164(driver.phone);
     const customerName = tour.customer?.company_name ?? "deine Tour";
     const message =
       `🚛 Cargo Köhler – Rollkartennummer benötigt\n\n` +
@@ -47,7 +56,7 @@ export async function POST(request: NextRequest) {
     try {
       await client.messages.create({
         from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
-        to: `whatsapp:${driver.phone}`,
+        to: `whatsapp:${phone}`,
         body: message,
       });
       await supabase.from("tours").update({
