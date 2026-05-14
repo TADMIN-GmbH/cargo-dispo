@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Upload, Euro, Calendar, Trash2, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { FileText, Upload, Euro, Calendar, Trash2, Loader2, Car, Filter } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Gutschrift, GutschriftPosition } from "@/lib/types";
 
@@ -24,14 +25,10 @@ function formatEur(val?: number | null): string {
 
 function formatDate(val?: string | null): string {
   if (!val) return "–";
-  try {
-    return new Date(val).toLocaleDateString("de-DE");
-  } catch {
-    return val;
-  }
+  try { return new Date(val).toLocaleDateString("de-DE"); } catch { return val; }
 }
 
-type Tab = "datum" | "gutschriften";
+type Tab = "datum" | "kennzeichen" | "gutschriften";
 
 export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("datum");
@@ -40,6 +37,55 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Global filters
+  const [filterAbsender, setFilterAbsender] = useState<string>("all");
+  const [filterVon, setFilterVon] = useState("");
+  const [filterBis, setFilterBis] = useState("");
+
+  // Unique absender list for dropdown
+  const absenderList = useMemo(() => {
+    const set = new Set<string>();
+    gutschriften.forEach((g) => { if (g.absender) set.add(g.absender); });
+    return Array.from(set).sort();
+  }, [gutschriften]);
+
+  // Filtered positionen
+  const filteredPositionen = useMemo(() => {
+    return positionen.filter((p) => {
+      if (filterAbsender !== "all" && p.gutschrift?.absender !== filterAbsender) return false;
+      if (filterVon && p.bel_datum && p.bel_datum < filterVon) return false;
+      if (filterBis && p.bel_datum && p.bel_datum > filterBis) return false;
+      return true;
+    });
+  }, [positionen, filterAbsender, filterVon, filterBis]);
+
+  // Filtered gutschriften
+  const filteredGutschriften = useMemo(() => {
+    return gutschriften.filter((g) => {
+      if (filterAbsender !== "all" && g.absender !== filterAbsender) return false;
+      if (filterVon && g.document_date && g.document_date < filterVon) return false;
+      if (filterBis && g.document_date && g.document_date > filterBis) return false;
+      return true;
+    });
+  }, [gutschriften, filterAbsender, filterVon, filterBis]);
+
+  // Grouped by Kennzeichen
+  const byKennzeichen = useMemo(() => {
+    const map = new Map<string, { positionen: PositionWithGutschrift[]; netto: number }>();
+    filteredPositionen.forEach((p) => {
+      const key = p.kennzeichen ?? "–";
+      const existing = map.get(key) ?? { positionen: [], netto: 0 };
+      existing.positionen.push(p);
+      existing.netto += p.netto_betrag ?? 0;
+      map.set(key, existing);
+    });
+    return Array.from(map.entries())
+      .map(([kennzeichen, data]) => ({ kennzeichen, ...data }))
+      .sort((a, b) => a.kennzeichen.localeCompare(b.kennzeichen));
+  }, [filteredPositionen]);
+
+  const [expandedKennzeichen, setExpandedKennzeichen] = useState<string | null>(null);
+
   const uploadFile = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
       setUploadStatus({ type: "error", message: "Nur PDF-Dateien werden unterstützt." });
@@ -47,17 +93,11 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
     }
     setUploading(true);
     setUploadStatus(null);
-
     try {
       const formData = new FormData();
       formData.append("file", file);
-
-      const res = await fetch("/api/gutschriften/upload", {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch("/api/gutschriften/upload", { method: "POST", body: formData });
       const data = await res.json();
-
       if (!res.ok || !data.success) {
         setUploadStatus({ type: "error", message: data.error ?? "Upload fehlgeschlagen." });
       } else {
@@ -65,8 +105,7 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
         setTimeout(() => window.location.reload(), 1200);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unbekannter Fehler";
-      setUploadStatus({ type: "error", message: msg });
+      setUploadStatus({ type: "error", message: err instanceof Error ? err.message : "Unbekannter Fehler" });
     } finally {
       setUploading(false);
     }
@@ -91,10 +130,13 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
     window.location.reload();
   }
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: "datum", label: "Nach Datum" },
-    { id: "gutschriften", label: "Gutschriften" },
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "datum",        label: "Nach Datum",       icon: <Calendar className="w-3.5 h-3.5" /> },
+    { id: "kennzeichen",  label: "Nach Fahrzeug",    icon: <Car className="w-3.5 h-3.5" /> },
+    { id: "gutschriften", label: "Gutschriften",      icon: <Euro className="w-3.5 h-3.5" /> },
   ];
+
+  const hasFilter = filterAbsender !== "all" || filterVon || filterBis;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -127,13 +169,7 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
             onDragLeave={() => setDragging(false)}
             onDrop={handleDrop}
           >
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              onChange={handleFileChange}
-            />
+            <input ref={inputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileChange} />
             {uploading ? (
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -150,37 +186,53 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
               </div>
             )}
           </div>
-
           {uploadStatus && (
-            <div
-              className={cn(
-                "mt-3 px-4 py-3 rounded-lg text-sm font-medium",
-                uploadStatus.type === "success"
-                  ? "bg-green-50 text-green-800 border border-green-200"
-                  : "bg-red-50 text-red-800 border border-red-200"
-              )}
-            >
+            <div className={cn("mt-3 px-4 py-3 rounded-lg text-sm font-medium",
+              uploadStatus.type === "success" ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200")}>
               {uploadStatus.message}
             </div>
           )}
         </CardContent>
       </Card>
 
+      {/* Global filter bar */}
+      <div className="flex flex-wrap gap-3 items-center p-4 bg-gray-50 rounded-xl border border-gray-200">
+        <Filter className="w-4 h-4 text-gray-500 shrink-0" />
+        <select
+          value={filterAbsender}
+          onChange={(e) => setFilterAbsender(e.target.value)}
+          className="h-9 text-sm border border-gray-300 rounded-lg px-3 bg-white min-w-[200px]"
+        >
+          <option value="all">Alle Kunden</option>
+          {absenderList.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Von</span>
+          <Input type="date" value={filterVon} onChange={(e) => setFilterVon(e.target.value)} className="h-9 text-sm w-36" />
+          <span className="text-xs text-gray-500">Bis</span>
+          <Input type="date" value={filterBis} onChange={(e) => setFilterBis(e.target.value)} className="h-9 text-sm w-36" />
+        </div>
+        {hasFilter && (
+          <Button variant="ghost" size="sm" className="text-gray-500 h-9"
+            onClick={() => { setFilterAbsender("all"); setFilterVon(""); setFilterBis(""); }}>
+            Zurücksetzen
+          </Button>
+        )}
+        {hasFilter && (
+          <span className="text-xs text-blue-600 font-medium ml-auto">
+            {filteredPositionen.length} Position{filteredPositionen.length !== 1 ? "en" : ""} · {filteredGutschriften.length} Gutschrift{filteredGutschriften.length !== 1 ? "en" : ""}
+          </span>
+        )}
+      </div>
+
       {/* Tabs */}
       <div>
         <div className="flex gap-1 border-b border-gray-200 mb-4">
           {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
-                activeTab === tab.id
-                  ? "border-blue-600 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              )}
-            >
-              {tab.label}
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+              className={cn("flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px",
+                activeTab === tab.id ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700")}>
+              {tab.icon}{tab.label}
             </button>
           ))}
         </div>
@@ -192,14 +244,12 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
               <CardTitle className="flex items-center gap-2 text-base">
                 <Calendar className="w-4 h-4" />
                 Positionen nach Belegdatum
-                <Badge className="ml-2">{positionen.length}</Badge>
+                <Badge className="ml-2">{filteredPositionen.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {positionen.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-sm">
-                  Noch keine Positionen vorhanden. Laden Sie eine Gutschrift hoch.
-                </div>
+              {filteredPositionen.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Keine Positionen gefunden.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -214,26 +264,103 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
                       </tr>
                     </thead>
                     <tbody>
-                      {positionen.map((pos) => (
+                      {filteredPositionen.map((pos) => (
                         <tr key={pos.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 text-gray-700">{formatDate(pos.bel_datum)}</td>
                           <td className="px-4 py-3">
-                            {pos.kennzeichen ? (
-                              <Badge variant="secondary">{pos.kennzeichen}</Badge>
-                            ) : (
-                              <span className="text-gray-400">–</span>
-                            )}
+                            {pos.kennzeichen
+                              ? <Badge variant="secondary">{pos.kennzeichen}</Badge>
+                              : <span className="text-gray-400">–</span>}
                           </td>
-                          <td className="px-4 py-3 text-right font-mono font-medium text-gray-800">
-                            {formatEur(pos.netto_betrag)}
-                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-medium text-gray-800">{formatEur(pos.netto_betrag)}</td>
                           <td className="px-4 py-3 text-gray-600">{pos.gutschrift?.gutschrift_nr ?? "–"}</td>
                           <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate">{pos.gutschrift?.absender ?? "–"}</td>
                           <td className="px-4 py-3 text-gray-500">{pos.tour_nr ?? "–"}</td>
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-200 bg-gray-50">
+                        <td colSpan={2} className="px-4 py-3 text-sm font-semibold text-gray-700">Gesamt</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                          {formatEur(filteredPositionen.reduce((s, p) => s + (p.netto_betrag ?? 0), 0))}
+                        </td>
+                        <td colSpan={3} />
+                      </tr>
+                    </tfoot>
                   </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Tab: Nach Fahrzeug */}
+        {activeTab === "kennzeichen" && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Car className="w-4 h-4" />
+                Positionen nach Fahrzeugreferenz
+                <Badge className="ml-2">{byKennzeichen.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {byKennzeichen.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Keine Positionen gefunden.</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {byKennzeichen.map(({ kennzeichen, positionen: pos, netto }) => (
+                    <div key={kennzeichen}>
+                      {/* Summary row — clickable to expand */}
+                      <button
+                        className="w-full flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                        onClick={() => setExpandedKennzeichen(expandedKennzeichen === kennzeichen ? null : kennzeichen)}
+                      >
+                        <Badge variant="secondary" className="font-mono min-w-[90px] justify-center">{kennzeichen}</Badge>
+                        <span className="text-sm text-gray-500">{pos.length} Position{pos.length !== 1 ? "en" : ""}</span>
+                        <span className="ml-auto font-mono font-semibold text-gray-900">{formatEur(netto)}</span>
+                        <span className="text-gray-400 text-xs">{expandedKennzeichen === kennzeichen ? "▲" : "▼"}</span>
+                      </button>
+
+                      {/* Expanded detail rows */}
+                      {expandedKennzeichen === kennzeichen && (
+                        <div className="bg-gray-50 border-t border-gray-100">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-gray-200">
+                                <th className="text-left px-8 py-2 text-xs font-semibold text-gray-500">Datum</th>
+                                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-500">Netto</th>
+                                <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">Gutschrift-Nr.</th>
+                                <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">Absender</th>
+                                <th className="text-left px-4 py-2 text-xs font-semibold text-gray-500">Tour-Nr.</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pos.sort((a, b) => (a.bel_datum ?? "").localeCompare(b.bel_datum ?? "")).map((p) => (
+                                <tr key={p.id} className="border-b border-gray-100 hover:bg-white transition-colors">
+                                  <td className="px-8 py-2 text-gray-700">{formatDate(p.bel_datum)}</td>
+                                  <td className="px-4 py-2 text-right font-mono text-gray-800">{formatEur(p.netto_betrag)}</td>
+                                  <td className="px-4 py-2 text-gray-600">{p.gutschrift?.gutschrift_nr ?? "–"}</td>
+                                  <td className="px-4 py-2 text-gray-500 max-w-[180px] truncate">{p.gutschrift?.absender ?? "–"}</td>
+                                  <td className="px-4 py-2 text-gray-500">{p.tour_nr ?? "–"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Grand total */}
+                  <div className="flex items-center gap-4 px-4 py-3 bg-gray-50 border-t-2 border-gray-200">
+                    <span className="text-sm font-semibold text-gray-700">Gesamt</span>
+                    <span className="ml-auto font-mono font-bold text-gray-900">
+                      {formatEur(byKennzeichen.reduce((s, k) => s + k.netto, 0))}
+                    </span>
+                    <span className="w-6" />
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -247,14 +374,12 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
               <CardTitle className="flex items-center gap-2 text-base">
                 <Euro className="w-4 h-4" />
                 Gutschriften
-                <Badge className="ml-2">{gutschriften.length}</Badge>
+                <Badge className="ml-2">{filteredGutschriften.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {gutschriften.length === 0 ? (
-                <div className="text-center py-12 text-gray-400 text-sm">
-                  Noch keine Gutschriften vorhanden.
-                </div>
+              {filteredGutschriften.length === 0 ? (
+                <div className="text-center py-12 text-gray-400 text-sm">Keine Gutschriften gefunden.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -271,7 +396,7 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
                       </tr>
                     </thead>
                     <tbody>
-                      {gutschriften.map((g) => (
+                      {filteredGutschriften.map((g) => (
                         <tr key={g.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 text-gray-700">{formatDate(g.document_date)}</td>
                           <td className="px-4 py-3 text-gray-800 font-medium max-w-[180px] truncate">{g.absender ?? "–"}</td>
@@ -281,17 +406,29 @@ export function GutschriftenView({ positionen, gutschriften }: GutschriftenViewP
                           <td className="px-4 py-3 text-right font-mono font-semibold text-gray-900">{formatEur(g.brutto_gesamt)}</td>
                           <td className="px-4 py-3 text-gray-400 text-xs max-w-[160px] truncate">{g.file_name ?? "–"}</td>
                           <td className="px-4 py-3">
-                            <button
-                              onClick={() => handleDelete(g.id)}
-                              className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                              title="Löschen"
-                            >
+                            <button onClick={() => handleDelete(g.id)}
+                              className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Löschen">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </td>
                         </tr>
                       ))}
                     </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-gray-200 bg-gray-50">
+                        <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-gray-700">Gesamt</td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (g.netto_gesamt ?? 0), 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (g.mwst ?? 0), 0))}
+                        </td>
+                        <td className="px-4 py-3 text-right font-mono font-bold text-gray-900">
+                          {formatEur(filteredGutschriften.reduce((s, g) => s + (g.brutto_gesamt ?? 0), 0))}
+                        </td>
+                        <td colSpan={2} />
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               )}
