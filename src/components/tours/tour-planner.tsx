@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Tour, Driver, Vehicle, Customer } from "@/lib/types";
+import { Tour, Driver, Vehicle, Customer, CustomerLocation } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,7 @@ const emptyTour = {
   driver_id: "",
   vehicle_id: "",
   customer_id: "",
+  customer_location_id: "",
   status: "planned" as const,
   pickup_address: "",
   delivery_address: "",
@@ -46,10 +47,11 @@ interface TourPlannerProps {
   drivers: Pick<Driver, "id" | "first_name" | "last_name" | "status">[];
   vehicles: Pick<Vehicle, "id" | "license_plate" | "type" | "status">[];
   customers: Pick<Customer, "id" | "company_name" | "city">[];
+  locations: Pick<CustomerLocation, "id" | "customer_id" | "name" | "city" | "contact_person" | "phone" | "email" | "street" | "zip">[];
   selectedDate?: string;
 }
 
-export function TourPlanner({ initialTours, drivers, vehicles, customers, selectedDate }: TourPlannerProps) {
+export function TourPlanner({ initialTours, drivers, vehicles, customers, locations, selectedDate }: TourPlannerProps) {
   const supabase = createClient();
   const [tours, setTours] = useState(initialTours);
   const [search, setSearch] = useState("");
@@ -65,11 +67,16 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
   const [sendingRollkarte, setSendingRollkarte] = useState(false);
   const [rollkarteResult, setRollkarteResult] = useState<string | null>(null);
 
+  // Locations for the currently selected customer
+  const customerLocations = locations.filter((l) => l.customer_id === form.customer_id);
+
   const filtered = tours.filter((t) => {
     const customer = (t as any).customer;
     const driver = (t as any).driver;
+    const location = (t as any).customer_location;
     const matchSearch =
       customer?.company_name?.toLowerCase().includes(search.toLowerCase()) ||
+      location?.name?.toLowerCase().includes(search.toLowerCase()) ||
       `${driver?.first_name} ${driver?.last_name}`.toLowerCase().includes(search.toLowerCase()) ||
       t.tour_date.includes(search);
     const matchStatus = statusFilter === "all" || t.status === statusFilter;
@@ -89,6 +96,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
       driver_id: t.driver_id ?? "",
       vehicle_id: t.vehicle_id ?? "",
       customer_id: t.customer_id ?? "",
+      customer_location_id: t.customer_location_id ?? "",
       status: t.status as typeof emptyTour.status,
       pickup_address: t.pickup_address ?? "",
       delivery_address: t.delivery_address ?? "",
@@ -105,6 +113,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
       driver_id: form.driver_id || null,
       vehicle_id: form.vehicle_id || null,
       customer_id: form.customer_id || null,
+      customer_location_id: form.customer_location_id || null,
       status: form.status,
       pickup_address: form.pickup_address || null,
       delivery_address: form.delivery_address || null,
@@ -112,7 +121,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
       notes: form.notes || null,
     };
 
-    const joinQuery = "*, driver:drivers(id,first_name,last_name), vehicle:vehicles(id,license_plate,type), customer:customers(id,company_name,city)";
+    const joinQuery = "*, driver:drivers(id,first_name,last_name), vehicle:vehicles(id,license_plate,type), customer:customers(id,company_name,city), customer_location:customer_locations(id,name,city,contact_person)";
 
     if (editing) {
       const { data } = await supabase.from("tours").update(payload).eq("id", editing.id).select(joinQuery).single();
@@ -216,7 +225,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
-            placeholder="Suche nach Kunde, Fahrer, Datum..."
+            placeholder="Suche nach Kunde, Standort, Fahrer, Datum..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -244,7 +253,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
               <thead>
                 <tr className="border-b border-gray-100">
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Datum</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Kunde</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Kunde / Standort</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Fahrer</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Fahrzeug</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
@@ -267,6 +276,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
                     const driver = (t as any).driver;
                     const vehicle = (t as any).vehicle;
                     const customer = (t as any).customer;
+                    const location = (t as any).customer_location;
                     return (
                       <tr key={t.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">
@@ -274,7 +284,12 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-900">
                           {customer?.company_name ?? <span className="text-gray-300">–</span>}
-                          {customer?.city && <span className="text-gray-400 text-xs block">{customer.city}</span>}
+                          {location?.name
+                            ? <span className="text-blue-600 text-xs block font-medium">📍 {location.name}</span>
+                            : customer?.city
+                              ? <span className="text-gray-400 text-xs block">{customer.city}</span>
+                              : null
+                          }
                         </td>
                         <td className="px-6 py-4 text-sm text-gray-600">
                           {driver ? `${driver.first_name} ${driver.last_name}` : <span className="text-gray-300">–</span>}
@@ -352,16 +367,40 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
 
             <div className="space-y-1.5">
               <Label>Kunde</Label>
-              <Select value={form.customer_id || "none"} onValueChange={(v) => setForm({ ...form, customer_id: v === "none" ? "" : v })}>
+              <Select
+                value={form.customer_id || "none"}
+                onValueChange={(v) => setForm({ ...form, customer_id: v === "none" ? "" : v, customer_location_id: "" })}
+              >
                 <SelectTrigger><SelectValue placeholder="Kunde wählen" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Kein Kunde</SelectItem>
                   {customers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.company_name}{c.city ? ` – ${c.city}` : ""}</SelectItem>
+                    <SelectItem key={c.id} value={c.id}>{c.company_name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Location dropdown — only shown if selected customer has locations */}
+            {form.customer_id && customerLocations.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Standort</Label>
+                <Select
+                  value={form.customer_location_id || "none"}
+                  onValueChange={(v) => setForm({ ...form, customer_location_id: v === "none" ? "" : v })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Standort wählen (optional)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Kein Standort</SelectItem>
+                    {customerLocations.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>
+                        {l.name}{l.city ? ` – ${l.city}` : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">

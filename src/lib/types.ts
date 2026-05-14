@@ -53,6 +53,20 @@ export interface Driver {
   created_at: string;
 }
 
+export interface CustomerLocation {
+  id: string;
+  customer_id: string;
+  name: string;
+  street?: string;
+  zip?: string;
+  city?: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  created_at: string;
+}
+
 export interface CustomerVehicleAlias {
   id: string;
   customer_id: string;
@@ -77,6 +91,7 @@ export interface Customer {
   rollkarte_accepts_text?: boolean;
   vehicle_ref_label?: string;
   vehicle_aliases?: CustomerVehicleAlias[];
+  locations?: CustomerLocation[];
   price_daily_rate?: number;
   price_diesel_pct?: number;
   price_toll_flat?: number;
@@ -104,6 +119,8 @@ export interface Tour {
   rollkarte_source?: "whatsapp" | "manual";
   rollkarte_updated_by?: string;
   billing_ref?: string;
+  customer_location_id?: string;
+  customer_location?: CustomerLocation;
   created_by?: string;
   created_at: string;
 }

@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, Hash, ArrowLeftRight } from "lucide-react";
+import { Building2, Plus, Search, Pencil, Trash2, Phone, Mail, MapPin, Hash, ArrowLeftRight, Navigation } from "lucide-react";
+import { CustomerLocation } from "@/lib/types";
 
 const emptyCustomer = {
   company_name: "",
@@ -47,7 +48,10 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   const [view, setView] = useState<"table" | "cards">("table");
   const [aliases, setAliases] = useState<CustomerVehicleAlias[]>([]);
   const [newAlias, setNewAlias] = useState({ alias: "", vehicle_id: "" });
-  const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "preisformel">("stammdaten");
+  const [locations, setLocations] = useState<CustomerLocation[]>([]);
+  const [locationForm, setLocationForm] = useState({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
+  const [editingLocation, setEditingLocation] = useState<CustomerLocation | null>(null);
+  const [dialogTab, setDialogTab] = useState<"stammdaten" | "einstellungen" | "standorte" | "preisformel">("stammdaten");
 
   const filtered = customers.filter(
     (c) =>
@@ -61,6 +65,9 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
     setForm(emptyCustomer);
     setAliases([]);
     setNewAlias({ alias: "", vehicle_id: "" });
+    setLocations([]);
+    setLocationForm({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
+    setEditingLocation(null);
     setDialogTab("stammdaten");
     setDialogOpen(true);
   }
@@ -69,6 +76,9 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
     setEditing(c);
     setAliases(c.vehicle_aliases ?? []);
     setNewAlias({ alias: "", vehicle_id: "" });
+    setLocations(c.locations ?? []);
+    setLocationForm({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
+    setEditingLocation(null);
     setDialogTab("stammdaten");
     setForm({
       company_name: c.company_name,
@@ -140,6 +150,38 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
   async function deleteAlias(id: string) {
     await supabase.from("customer_vehicle_aliases").delete().eq("id", id);
     setAliases((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  async function saveLocation() {
+    if (!editing || !locationForm.name) return;
+    if (editingLocation) {
+      const { data } = await supabase
+        .from("customer_locations")
+        .update(locationForm)
+        .eq("id", editingLocation.id)
+        .select()
+        .single();
+      if (data) {
+        setLocations((prev) => prev.map((l) => (l.id === editingLocation.id ? data as CustomerLocation : l)));
+        setEditingLocation(null);
+        setLocationForm({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
+      }
+    } else {
+      const { data } = await supabase
+        .from("customer_locations")
+        .insert({ ...locationForm, customer_id: editing.id })
+        .select()
+        .single();
+      if (data) {
+        setLocations((prev) => [...prev, data as CustomerLocation]);
+        setLocationForm({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" });
+      }
+    }
+  }
+
+  async function deleteLocation(id: string) {
+    await supabase.from("customer_locations").delete().eq("id", id);
+    setLocations((prev) => prev.filter((l) => l.id !== id));
   }
 
   async function handleDelete(id: string) {
@@ -295,7 +337,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
 
           {/* Tab buttons */}
           <div className="flex border-b border-gray-200 -mx-6 px-6 mb-4">
-            {(["stammdaten", "einstellungen", "preisformel"] as const).map((t) => (
+            {(["stammdaten", "standorte", "einstellungen", "preisformel"] as const).map((t) => (
               <button
                 key={t}
                 type="button"
@@ -304,7 +346,7 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                   dialogTab === t ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500 hover:text-gray-700"
                 }`}
               >
-                {t === "stammdaten" ? "Stammdaten" : t === "einstellungen" ? "Einstellungen" : "Preisformel"}
+                {t === "stammdaten" ? "Stammdaten" : t === "standorte" ? `Standorte${locations.length > 0 ? ` (${locations.length})` : ""}` : t === "einstellungen" ? "Einstellungen" : "Preisformel"}
               </button>
             ))}
           </div>
@@ -349,6 +391,102 @@ export function CustomerList({ initialCustomers, vehicles }: CustomerListProps) 
                   <Label>Notizen</Label>
                   <Textarea rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
                 </div>
+              </div>
+            )}
+
+            {dialogTab === "standorte" && (
+              <div className="space-y-4">
+                {!editing && (
+                  <p className="text-sm text-gray-500 text-center py-4">Bitte zuerst den Kunden anlegen, dann Standorte hinzufügen.</p>
+                )}
+                {editing && (
+                  <>
+                    {/* Existing locations */}
+                    {locations.length > 0 && (
+                      <div className="space-y-2">
+                        {locations.map((loc) => (
+                          <div key={loc.id} className="rounded-lg border border-gray-200 bg-white p-3">
+                            {editingLocation?.id === loc.id ? (
+                              <div className="space-y-2">
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Standortname *</Label>
+                                    <Input className="h-8 text-sm" value={locationForm.name} onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })} />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <Label className="text-xs">Ansprechpartner</Label>
+                                    <Input className="h-8 text-sm" value={locationForm.contact_person} onChange={(e) => setLocationForm({ ...locationForm, contact_person: e.target.value })} />
+                                  </div>
+                                </div>
+                                <Input className="h-8 text-sm" placeholder="Straße" value={locationForm.street} onChange={(e) => setLocationForm({ ...locationForm, street: e.target.value })} />
+                                <div className="grid grid-cols-3 gap-2">
+                                  <Input className="h-8 text-sm" placeholder="PLZ" value={locationForm.zip} onChange={(e) => setLocationForm({ ...locationForm, zip: e.target.value })} />
+                                  <Input className="h-8 text-sm col-span-2" placeholder="Stadt" value={locationForm.city} onChange={(e) => setLocationForm({ ...locationForm, city: e.target.value })} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <Input className="h-8 text-sm" placeholder="Telefon" value={locationForm.phone} onChange={(e) => setLocationForm({ ...locationForm, phone: e.target.value })} />
+                                  <Input className="h-8 text-sm" placeholder="E-Mail" value={locationForm.email} onChange={(e) => setLocationForm({ ...locationForm, email: e.target.value })} />
+                                </div>
+                                <div className="flex gap-2 justify-end">
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setEditingLocation(null); setLocationForm({ name: "", street: "", zip: "", city: "", contact_person: "", phone: "", email: "" }); }}>Abbrechen</Button>
+                                  <Button size="sm" className="h-7 text-xs" onClick={saveLocation} disabled={!locationForm.name}>Speichern</Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-start gap-2">
+                                <Navigation className="w-3.5 h-3.5 text-blue-500 mt-0.5 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold text-gray-800">{loc.name}</p>
+                                  {(loc.street || loc.city) && <p className="text-xs text-gray-500">{[loc.street, loc.zip && loc.city ? `${loc.zip} ${loc.city}` : loc.city].filter(Boolean).join(", ")}</p>}
+                                  {loc.contact_person && <p className="text-xs text-gray-500">{loc.contact_person}{loc.phone ? ` · ${loc.phone}` : ""}</p>}
+                                </div>
+                                <div className="flex gap-1 shrink-0">
+                                  <button onClick={() => { setEditingLocation(loc); setLocationForm({ name: loc.name, street: loc.street ?? "", zip: loc.zip ?? "", city: loc.city ?? "", contact_person: loc.contact_person ?? "", phone: loc.phone ?? "", email: loc.email ?? "" }); }} className="p-1 text-gray-400 hover:text-blue-600">
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => deleteLocation(loc.id)} className="p-1 text-gray-400 hover:text-red-600">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add new location form */}
+                    {!editingLocation && (
+                      <div className="rounded-lg border border-dashed border-gray-300 p-3 space-y-2 bg-gray-50">
+                        <p className="text-xs font-semibold text-gray-600 flex items-center gap-1.5"><Plus className="w-3.5 h-3.5" /> Neuer Standort</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label className="text-xs">Standortname *</Label>
+                            <Input className="h-8 text-sm" placeholder='z.B. "Neuss" oder "Werk Nord"' value={locationForm.name} onChange={(e) => setLocationForm({ ...locationForm, name: e.target.value })} />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-xs">Ansprechpartner</Label>
+                            <Input className="h-8 text-sm" value={locationForm.contact_person} onChange={(e) => setLocationForm({ ...locationForm, contact_person: e.target.value })} />
+                          </div>
+                        </div>
+                        <Input className="h-8 text-sm" placeholder="Straße" value={locationForm.street} onChange={(e) => setLocationForm({ ...locationForm, street: e.target.value })} />
+                        <div className="grid grid-cols-3 gap-2">
+                          <Input className="h-8 text-sm" placeholder="PLZ" value={locationForm.zip} onChange={(e) => setLocationForm({ ...locationForm, zip: e.target.value })} />
+                          <Input className="h-8 text-sm col-span-2" placeholder="Stadt" value={locationForm.city} onChange={(e) => setLocationForm({ ...locationForm, city: e.target.value })} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input className="h-8 text-sm" placeholder="Telefon" value={locationForm.phone} onChange={(e) => setLocationForm({ ...locationForm, phone: e.target.value })} />
+                          <Input className="h-8 text-sm" placeholder="E-Mail" value={locationForm.email} onChange={(e) => setLocationForm({ ...locationForm, email: e.target.value })} />
+                        </div>
+                        <div className="flex justify-end">
+                          <Button size="sm" className="h-8" onClick={saveLocation} disabled={!locationForm.name}>
+                            <Plus className="w-3.5 h-3.5 mr-1" /> Standort hinzufügen
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             )}
 
