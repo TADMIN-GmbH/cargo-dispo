@@ -7,36 +7,59 @@ const supabase = createClient(
 );
 
 // GET /api/archived?table=drivers|customers|vehicles
-// Returns all rows where archived_at IS NOT NULL (bypasses RLS via service role)
 export async function GET(req: NextRequest) {
   const table = req.nextUrl.searchParams.get("table");
-  if (!["drivers", "customers", "vehicles"].includes(table ?? "")) {
-    return NextResponse.json({ error: "Invalid table" }, { status: 400 });
-  }
-
-  let query = supabase.from(table as "drivers" | "customers" | "vehicles").select("*").not("archived_at", "is", null);
 
   if (table === "drivers") {
-    query = supabase.from("drivers").select("*, current_vehicle:vehicles(id,license_plate)").not("archived_at", "is", null).order("last_name");
-  } else if (table === "customers") {
-    query = supabase.from("customers").select("*").not("archived_at", "is", null).order("company_name");
-  } else if (table === "vehicles") {
-    query = supabase.from("vehicles").select("*").not("archived_at", "is", null).order("license_plate");
+    const { data, error } = await supabase
+      .from("drivers")
+      .select("*, current_vehicle:vehicles(id,license_plate)")
+      .not("archived_at", "is", null)
+      .order("last_name");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data ?? []);
   }
 
-  const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data ?? []);
+  if (table === "customers") {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("id, company_name, contact_person, city, zip, phone, email, archived_at")
+      .not("archived_at", "is", null)
+      .order("company_name");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data ?? []);
+  }
+
+  if (table === "vehicles") {
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("*")
+      .not("archived_at", "is", null)
+      .order("license_plate");
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(data ?? []);
+  }
+
+  return NextResponse.json({ error: "Invalid table. Use: drivers, customers, vehicles" }, { status: 400 });
 }
 
 // PATCH /api/archived — restore a record (set archived_at = null)
 export async function PATCH(req: NextRequest) {
-  const { table, id } = await req.json();
-  if (!["drivers", "customers", "vehicles"].includes(table ?? "")) {
+  const body = await req.json();
+  const { table, id } = body as { table: string; id: string };
+
+  if (!["drivers", "customers", "vehicles"].includes(table)) {
     return NextResponse.json({ error: "Invalid table" }, { status: 400 });
   }
+  if (!id) {
+    return NextResponse.json({ error: "id required" }, { status: 400 });
+  }
 
-  const { error } = await supabase.from(table).update({ archived_at: null }).eq("id", id);
+  const { error } = await supabase
+    .from(table as "drivers" | "customers" | "vehicles")
+    .update({ archived_at: null })
+    .eq("id", id);
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }
