@@ -37,6 +37,7 @@ const emptyTour = {
   status: "planned" as const,
   pickup_address: "",
   delivery_address: "",
+  billing_ref: "",
   notes: "",
 };
 
@@ -91,6 +92,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
       status: t.status as typeof emptyTour.status,
       pickup_address: t.pickup_address ?? "",
       delivery_address: t.delivery_address ?? "",
+      billing_ref: t.billing_ref ?? "",
       notes: t.notes ?? "",
     });
     setDialogOpen(true);
@@ -106,6 +108,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
       status: form.status,
       pickup_address: form.pickup_address || null,
       delivery_address: form.delivery_address || null,
+      billing_ref: form.billing_ref || null,
       notes: form.notes || null,
     };
 
@@ -244,9 +247,9 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Kunde</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Fahrer</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Fahrzeug</th>
-                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Lieferadresse</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Status</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Rollkarte</th>
+                  <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">GU/RE-Nr.</th>
                   <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Aktionen</th>
                 </tr>
               </thead>
@@ -279,9 +282,6 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
                         <td className="px-6 py-4 text-sm font-mono text-gray-600">
                           {vehicle?.license_plate ?? <span className="text-gray-300">–</span>}
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600 max-w-[160px] truncate">
-                          {t.delivery_address || <span className="text-gray-300">–</span>}
-                        </td>
                         <td className="px-6 py-4">
                           <Badge variant={status.variant}>{status.label}</Badge>
                         </td>
@@ -300,6 +300,9 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
                               </span>
                             )}
                           </button>
+                        </td>
+                        <td className="px-6 py-4 text-sm font-mono text-gray-600 whitespace-nowrap">
+                          {t.billing_ref || <span className="text-gray-300">–</span>}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
@@ -394,6 +397,10 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, select
             <div className="space-y-1.5">
               <Label>Lieferadresse</Label>
               <Input placeholder="Straße, PLZ Stadt" value={form.delivery_address} onChange={(e) => setForm({ ...form, delivery_address: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>GU/RE-Nr.</Label>
+              <Input placeholder="z.B. GU-2026-001 oder RE-2026-042" value={form.billing_ref} onChange={(e) => setForm({ ...form, billing_ref: e.target.value })} />
             </div>
             <div className="space-y-1.5">
               <Label>Notizen</Label>

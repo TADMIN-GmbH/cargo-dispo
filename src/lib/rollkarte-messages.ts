@@ -49,25 +49,25 @@ const confirmationTemplates = [
 
 const confirmedTemplates = [
   (name: string) =>
-    `Perfekt, danke ${name}! ✅ Alles eingetragen, gute Fahrt!`,
+    `Perfekt, danke ${name}! ✅ Alles eingetragen — bleib gesund!`,
 
   (name: string) =>
-    `Super, ${name}! 👍 Rollkarte bestätigt und gespeichert. Schöne Tour!`,
+    `Super, ${name}! 👍 Rollkarte bestätigt und gespeichert. Ich wünsche eine angenehme Fahrt!`,
 
   (name: string) =>
-    `Danke dir, ${name}! ✔️ Alles notiert — bleib sicher unterwegs!`,
+    `Danke dir, ${name}! ✔️ Alles notiert — gute Fahrt, staufrei voraus! 🚛`,
 
   (name: string) =>
     `Erledigt, ${name}! 🙌 Rollkarte ist im System. Gutes Gelingen heute!`,
 
   (name: string) =>
-    `Top, ${name}! ✅ Bestätigt und gespeichert. Gute Fahrt! 🚛`,
+    `Top, ${name}! ✅ Bestätigt und gespeichert. Bleib gesund und komm gut an!`,
 
   (name: string) =>
-    `Alles klar, ${name}! 😊 Rollkarte erfasst — einen schönen Tag noch!`,
+    `Alles klar, ${name}! 😊 Rollkarte erfasst — ich wünsche eine angenehme und staufreie Fahrt!`,
 
   (name: string) =>
-    `Prima, ${name}! 👌 Rollkarte gespeichert. Wir wünschen dir eine reibungslose Fahrt!`,
+    `Prima, ${name}! 👌 Rollkarte gespeichert. Gute Fahrt, staufrei voraus! 🟢`,
 ];
 
 const thankYouTemplates = [

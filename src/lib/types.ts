@@ -88,6 +88,7 @@ export interface Tour {
   rollkarte_answered_at?: string;
   rollkarte_source?: "whatsapp" | "manual";
   rollkarte_updated_by?: string;
+  billing_ref?: string;
   created_by?: string;
   created_at: string;
 }
