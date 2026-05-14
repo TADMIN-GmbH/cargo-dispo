@@ -144,13 +144,13 @@ export async function POST(request: NextRequest) {
         from,
         "❌ Sprachnachricht konnte nicht transkribiert werden. Bitte versuche es erneut oder schreibe als Text."
       );
-      return new Response("OK", { status: 200 });
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
     }
   }
 
   if (!transcript) {
     await sendReply(from, "Bitte sende eine Sprachnachricht oder Textnachricht.");
-    return new Response("OK", { status: 200 });
+    return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
   }
 
   // =========================================================
@@ -237,7 +237,7 @@ export async function POST(request: NextRequest) {
             );
           }
         }
-        return new Response("OK", { status: 200 });
+        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
       }
 
       // --- Extract rollkarte from natural-language reply ---
@@ -288,7 +288,7 @@ export async function POST(request: NextRequest) {
           `Ich konnte keine Rollkartennummer in deiner Nachricht finden, ${driver.first_name}.\n\nBitte schick die Nummer direkt, z.B.:\n*26-8365401*`
         );
       }
-      return new Response("OK", { status: 200 });
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
     }
 
     // Driver found but NO pending/requested/confirming tours.
@@ -308,7 +308,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       if (recentlyReceived) {
         await sendReply(from, getRollkarteConfirmedMessage(driver.first_name));
-        return new Response("OK", { status: 200 });
+        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
       }
     }
     // Fall through to admin check (driver may also have admin role)
@@ -331,7 +331,7 @@ export async function POST(request: NextRequest) {
       success: false,
       error_message: "Non-admin sender",
     });
-    return new Response("OK", { status: 200 });
+    return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
   }
 
   // =========================================================
@@ -413,7 +413,7 @@ export async function POST(request: NextRequest) {
         `• "Übernimm Touren von heute für Montag den 18. Mai 2026"\n` +
         `• "Übernimm Touren vom 12.05. für den 18.05."`
       );
-      return new Response("OK", { status: 200 });
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
     }
 
     const { data: sourceTours, error: fetchError } = await supabase
@@ -424,7 +424,7 @@ export async function POST(request: NextRequest) {
 
     if (fetchError) {
       await sendReply(from, `❌ Datenbankfehler: ${fetchError.message}`);
-      return new Response("OK", { status: 200 });
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
     }
 
     if (!sourceTours || sourceTours.length === 0) {
@@ -433,7 +433,7 @@ export async function POST(request: NextRequest) {
         from,
         `⚠️ Keine Touren für ${sd}.${sm}.${sy} gefunden — vielleicht war das ein freier Tag?`
       );
-      return new Response("OK", { status: 200 });
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
     }
 
     const newTours = sourceTours.map((t) => ({
@@ -462,7 +462,7 @@ export async function POST(request: NextRequest) {
     } else {
       await sendReply(from, `❌ Fehler beim Kopieren der Touren: ${insertError.message}`);
     }
-    return new Response("OK", { status: 200 });
+    return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
   }
 
   // =========================================================
@@ -684,7 +684,7 @@ Regeln:
   });
 
   await sendReply(from, replyMessage);
-  return new Response("OK", { status: 200 });
+  return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
 }
 
 async function sendReply(to: string, message: string) {
