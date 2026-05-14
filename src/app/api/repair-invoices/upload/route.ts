@@ -252,6 +252,26 @@ export async function POST(req: NextRequest) {
 
     // Run anomaly analysis
     const anomalies = await analyzeAnomalies(lineItems, vehicleId, normalizedPlate, amountBrutto);
+
+    // Duplicate detection: same invoice_number + supplier already in DB?
+    const invoiceNumber: string | null = extracted.invoice_number ?? null;
+    const supplier: string | null = extracted.supplier ?? null;
+    if (invoiceNumber && supplier) {
+      const { data: existing } = await supabase
+        .from("repair_invoices")
+        .select("id, file_name, invoice_date")
+        .ilike("invoice_number", invoiceNumber)
+        .ilike("supplier", supplier)
+        .limit(1);
+      if (existing && existing.length > 0) {
+        anomalies.unshift({
+          severity: "critical",
+          type: "duplicate",
+          message: `Duplikat: Rechnung ${invoiceNumber} von ${supplier} bereits vorhanden (${existing[0].file_name ?? existing[0].id})`,
+        });
+      }
+    }
+
     const aiStatus = determineAiStatus(anomalies);
 
     // Insert record

@@ -145,15 +145,30 @@ function AnomalyChip({ anomaly }: { anomaly: Anomaly }) {
   );
 }
 
-function InvoiceCard({ invoice }: { invoice: RepairInvoice }) {
+function InvoiceCard({ invoice, onDelete }: { invoice: RepairInvoice; onDelete: (id: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const [notes, setNotes] = useState(invoice.notes ?? "");
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const displayPlate = invoice.vehicle?.license_plate ?? invoice.license_plate ?? "–";
   const anomalies: Anomaly[] = Array.isArray(invoice.ai_anomalies) ? invoice.ai_anomalies : [];
   const lineItems: LineItem[] = Array.isArray(invoice.line_items) ? invoice.line_items : [];
+  const isDuplicate = anomalies.some((a) => a.type === "duplicate");
+
+  async function handleDelete() {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    try {
+      await fetch(`/api/repair-invoices/${invoice.id}`, { method: "DELETE" });
+      onDelete(invoice.id);
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  }
 
   async function saveNotes() {
     setSavingNotes(true);
@@ -171,8 +186,28 @@ function InvoiceCard({ invoice }: { invoice: RepairInvoice }) {
   }
 
   return (
-    <Card className="overflow-hidden">
+    <Card className={cn("overflow-hidden", isDuplicate && "border-red-300 ring-1 ring-red-300")}>
       <CardContent className="p-0">
+        {/* Duplicate banner */}
+        {isDuplicate && (
+          <div className="flex items-center justify-between px-4 py-2 bg-red-50 border-b border-red-200">
+            <span className="text-xs font-semibold text-red-700 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5" /> Duplikat erkannt — diese Rechnung existiert bereits
+            </span>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className={cn(
+                "text-xs font-semibold px-3 py-1 rounded-lg transition-colors",
+                confirmDelete
+                  ? "bg-red-600 text-white hover:bg-red-700"
+                  : "bg-red-100 text-red-700 hover:bg-red-200"
+              )}
+            >
+              {deleting ? "Wird gelöscht…" : confirmDelete ? "Wirklich löschen?" : "Löschen"}
+            </button>
+          </div>
+        )}
         {/* Main row */}
         <div className="p-4">
           <div className="flex flex-wrap items-start gap-3">
@@ -246,7 +281,23 @@ function InvoiceCard({ invoice }: { invoice: RepairInvoice }) {
               {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
               {lineItems.length} Position{lineItems.length !== 1 ? "en" : ""}
             </button>
-            <span className="text-xs text-gray-400">{invoice.file_name ?? ""}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-400">{invoice.file_name ?? ""}</span>
+              {!isDuplicate && (
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className={cn(
+                    "text-xs px-2 py-0.5 rounded transition-colors",
+                    confirmDelete
+                      ? "bg-red-600 text-white hover:bg-red-700"
+                      : "text-gray-400 hover:text-red-600 hover:bg-red-50"
+                  )}
+                >
+                  {deleting ? "…" : confirmDelete ? "Löschen?" : "Löschen"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -327,11 +378,16 @@ export function ReparaturenView({ invoices }: ReparaturenViewProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const processingRef = useRef(false);
 
+  const [allInvoices, setAllInvoices] = useState<RepairInvoice[]>(invoices);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
+  function handleDelete(id: string) {
+    setAllInvoices((prev) => prev.filter((inv) => inv.id !== id));
+  }
+
   const filtered = useMemo(() => {
-    return invoices.filter((inv) => {
+    return allInvoices.filter((inv) => {
       if (statusFilter !== "all" && inv.ai_status !== statusFilter) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -405,8 +461,8 @@ export function ReparaturenView({ invoices }: ReparaturenViewProps) {
   const isRunning = queue.length > 0 && queue.some((e) => e.status === "pending" || e.status === "uploading");
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: invoices.length, ok: 0, warning: 0, alert: 0, pending: 0 };
-    for (const inv of invoices) {
+    const counts: Record<string, number> = { all: allInvoices.length, ok: 0, warning: 0, alert: 0, pending: 0 };
+    for (const inv of allInvoices) {
       const s = inv.ai_status ?? "pending";
       counts[s] = (counts[s] ?? 0) + 1;
     }
@@ -547,7 +603,7 @@ export function ReparaturenView({ invoices }: ReparaturenViewProps) {
             {filtered.length} Rechnung{filtered.length !== 1 ? "en" : ""}
           </Badge>
           {filtered.map((inv) => (
-            <InvoiceCard key={inv.id} invoice={inv} />
+            <InvoiceCard key={inv.id} invoice={inv} onDelete={handleDelete} />
           ))}
         </div>
       )}

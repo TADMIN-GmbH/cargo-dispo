@@ -26,3 +26,26 @@ export async function PATCH(
 
   return NextResponse.json(data);
 }
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+
+  // Get file_path first to delete from storage too
+  const { data: record } = await supabase
+    .from("repair_invoices")
+    .select("file_path")
+    .eq("id", id)
+    .single();
+
+  if (record?.file_path) {
+    await supabase.storage.from("repair-invoices").remove([record.file_path]);
+  }
+
+  const { error } = await supabase.from("repair_invoices").delete().eq("id", id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ success: true });
+}
