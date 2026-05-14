@@ -1,6 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { GutschriftenView } from "@/components/gutschriften/gutschriften-view";
 
+// Normalize company name for fuzzy matching (ignore spacing, punctuation, legal suffixes)
+function normalize(s: string) {
+  return s.toLowerCase().replace(/[\s\-&.,]/g, "").replace(/gmbh|cokg|co\.kg|gmbh&co|&co/g, "");
+}
+
 export default async function GutschriftenPage() {
   const supabase = await createClient();
 
@@ -18,14 +23,15 @@ export default async function GutschriftenPage() {
       .select("alias, vehicle:vehicles(license_plate), customer:customers(absender:company_name)"),
   ]);
 
-  // Build lookup: absender → { alias → license_plate }
+  // Build lookup: normalized_absender → { alias → license_plate }
   const aliasMap: Record<string, Record<string, string>> = {};
   for (const a of aliases ?? []) {
-    const absender = (a.customer as any)?.absender;
-    const plate = (a.vehicle as any)?.license_plate;
+    const absender = (a.customer as any)?.absender as string | undefined;
+    const plate = (a.vehicle as any)?.license_plate as string | undefined;
     if (absender && a.alias && plate) {
-      if (!aliasMap[absender]) aliasMap[absender] = {};
-      aliasMap[absender][a.alias] = plate;
+      const key = normalize(absender);
+      if (!aliasMap[key]) aliasMap[key] = {};
+      aliasMap[key][String(a.alias)] = plate;
     }
   }
 
@@ -34,6 +40,7 @@ export default async function GutschriftenPage() {
       positionen={positionen ?? []}
       gutschriften={gutschriften ?? []}
       aliasMap={aliasMap}
+      normalizeAbsender={normalize}
     />
   );
 }

@@ -16,7 +16,8 @@ type PositionWithGutschrift = GutschriftPosition & {
 interface GutschriftenViewProps {
   positionen: PositionWithGutschrift[];
   gutschriften: Gutschrift[];
-  aliasMap: Record<string, Record<string, string>>; // absender → { alias → license_plate }
+  aliasMap: Record<string, Record<string, string>>; // normalized_absender → { alias → license_plate }
+  normalizeAbsender: (s: string) => string;
 }
 
 function formatEur(val?: number | null): string {
@@ -31,16 +32,19 @@ function formatDate(val?: string | null): string {
 
 type Tab = "datum" | "kennzeichen" | "gutschriften";
 
-function resolveKennzeichen(pos: PositionWithGutschrift, aliasMap: Record<string, Record<string, string>>): { display: string; resolved: boolean } {
-  const raw = pos.kennzeichen;
+function resolveKennzeichen(
+  pos: PositionWithGutschrift,
+  aliasMap: Record<string, Record<string, string>>,
+  normalize: (s: string) => string
+): { plate: string | null; raw: string | null; resolved: boolean } {
+  const raw = pos.kennzeichen ?? null;
   const absender = pos.gutschrift?.absender ?? "";
-  if (!raw) return { display: "–", resolved: false };
-  const plate = aliasMap[absender]?.[raw];
-  if (plate) return { display: `${plate} (${raw})`, resolved: true };
-  return { display: raw, resolved: false };
+  if (!raw) return { plate: null, raw: null, resolved: false };
+  const plate = aliasMap[normalize(absender)]?.[raw] ?? null;
+  return { plate, raw, resolved: !!plate };
 }
 
-export function GutschriftenView({ positionen, gutschriften, aliasMap }: GutschriftenViewProps) {
+export function GutschriftenView({ positionen, gutschriften, aliasMap, normalizeAbsender }: GutschriftenViewProps) {
   const [activeTab, setActiveTab] = useState<Tab>("datum");
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -81,21 +85,20 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
 
   // Grouped by Kennzeichen (use resolved plate as group key if available)
   const byKennzeichen = useMemo(() => {
-    const map = new Map<string, { raw: string; resolved: boolean; positionen: PositionWithGutschrift[]; netto: number }>();
+    const map = new Map<string, { plate: string | null; raw: string; resolved: boolean; positionen: PositionWithGutschrift[]; netto: number }>();
     filteredPositionen.forEach((p) => {
-      const raw = p.kennzeichen ?? "–";
-      const absender = p.gutschrift?.absender ?? "";
-      const plate = aliasMap[absender]?.[raw];
-      const groupKey = plate ? `${plate} (${raw})` : raw;
-      const existing = map.get(groupKey) ?? { raw, resolved: !!plate, positionen: [], netto: 0 };
+      const r = resolveKennzeichen(p, aliasMap, normalizeAbsender);
+      const raw = r.raw ?? "–";
+      const groupKey = r.plate ?? raw;
+      const existing = map.get(groupKey) ?? { plate: r.plate, raw, resolved: r.resolved, positionen: [], netto: 0 };
       existing.positionen.push(p);
       existing.netto += p.netto_betrag ?? 0;
       map.set(groupKey, existing);
     });
     return Array.from(map.entries())
-      .map(([kennzeichen, data]) => ({ kennzeichen, ...data }))
-      .sort((a, b) => a.kennzeichen.localeCompare(b.kennzeichen));
-  }, [filteredPositionen, aliasMap]);
+      .map(([groupKey, data]) => ({ groupKey, ...data }))
+      .sort((a, b) => a.groupKey.localeCompare(b.groupKey));
+  }, [filteredPositionen, aliasMap, normalizeAbsender]);
 
   const [expandedKennzeichen, setExpandedKennzeichen] = useState<string | null>(null);
 
@@ -281,7 +284,18 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
                         <tr key={pos.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 text-gray-700">{formatDate(pos.bel_datum)}</td>
                           <td className="px-4 py-3">
-                            {(() => { const r = resolveKennzeichen(pos, aliasMap); return r.display === "–" ? <span className="text-gray-400">–</span> : <Badge variant={r.resolved ? "default" : "secondary"}>{r.display}</Badge>; })()}
+                            {(() => {
+                              const r = resolveKennzeichen(pos, aliasMap, normalizeAbsender);
+                              if (!r.raw) return <span className="text-gray-400">–</span>;
+                              return (
+                                <div className="flex flex-col gap-0.5">
+                                  <Badge variant={r.resolved ? "default" : "secondary"} className="font-mono w-fit">
+                                    {r.plate ?? r.raw}
+                                  </Badge>
+                                  {r.resolved && <span className="text-[11px] text-gray-400 font-mono">{r.raw}</span>}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-right font-mono font-medium text-gray-800">{formatEur(pos.netto_betrag)}</td>
                           <td className="px-4 py-3 text-gray-600">{pos.gutschrift?.gutschrift_nr ?? "–"}</td>
@@ -321,21 +335,26 @@ export function GutschriftenView({ positionen, gutschriften, aliasMap }: Gutschr
                 <div className="text-center py-12 text-gray-400 text-sm">Keine Positionen gefunden.</div>
               ) : (
                 <div className="divide-y divide-gray-100">
-                  {byKennzeichen.map(({ kennzeichen, resolved, positionen: pos, netto }) => (
-                    <div key={kennzeichen}>
+                  {byKennzeichen.map(({ groupKey, plate, raw, resolved, positionen: pos, netto }) => (
+                    <div key={groupKey}>
                       {/* Summary row — clickable to expand */}
                       <button
                         className="w-full flex items-center gap-4 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
-                        onClick={() => setExpandedKennzeichen(expandedKennzeichen === kennzeichen ? null : kennzeichen)}
+                        onClick={() => setExpandedKennzeichen(expandedKennzeichen === groupKey ? null : groupKey)}
                       >
-                        <Badge variant={resolved ? "default" : "secondary"} className="font-mono min-w-[90px] justify-center">{kennzeichen}</Badge>
+                        <div className="flex flex-col gap-0.5 min-w-[100px]">
+                          <Badge variant={resolved ? "default" : "secondary"} className="font-mono w-fit">
+                            {plate ?? raw}
+                          </Badge>
+                          {resolved && <span className="text-[11px] text-gray-400 font-mono">{raw}</span>}
+                        </div>
                         <span className="text-sm text-gray-500">{pos.length} Position{pos.length !== 1 ? "en" : ""}</span>
                         <span className="ml-auto font-mono font-semibold text-gray-900">{formatEur(netto)}</span>
-                        <span className="text-gray-400 text-xs">{expandedKennzeichen === kennzeichen ? "▲" : "▼"}</span>
+                        <span className="text-gray-400 text-xs">{expandedKennzeichen === groupKey ? "▲" : "▼"}</span>
                       </button>
 
                       {/* Expanded detail rows */}
-                      {expandedKennzeichen === kennzeichen && (
+                      {expandedKennzeichen === groupKey && (
                         <div className="bg-gray-50 border-t border-gray-100">
                           <table className="w-full text-sm">
                             <thead>
