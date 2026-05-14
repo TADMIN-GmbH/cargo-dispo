@@ -177,12 +177,16 @@ export async function POST(request: NextRequest) {
       .in("rollkarte_status", ["pending", "requested", "confirming"]);
 
     if (driverTours && driverTours.length > 0) {
+      // Affirmative / negative helpers (used in multiple branches)
+      const trimmedMsg = transcript.trim();
+      const isAffirmative = /^(ja\b|yes\b|richtig|korrekt|stimmt|ok\b|genau|jo\b|yep|jep|passt|super|alles klar|👍|👍🏻|👍🏼|👍🏽|👍🏾|👍🏿|✅|✓)/i.test(trimmedMsg);
+      const isNegative   = /^(nein\b|no\b|falsch|nö\b|nicht\b|wrong)/i.test(trimmedMsg);
+
       // --- Handle confirmation flow ---
       const confirmingTour = driverTours.find((t: any) => t.rollkarte_status === "confirming");
       if (confirmingTour) {
-        const t = transcript.trim().toLowerCase();
-        const isYes = /^(ja|yes|richtig|korrekt|stimmt|ok|genau|jo|yep|jep|j$|👍)/.test(t);
-        const isNo = /^(nein|no|falsch|nö|nicht|wrong|n$)/.test(t);
+        const isYes = isAffirmative;
+        const isNo  = isNegative;
 
         if (isYes) {
           await supabase
@@ -228,6 +232,26 @@ export async function POST(request: NextRequest) {
           }
         }
         return new Response("OK", { status: 200 });
+      }
+
+      // --- Fallback: affirmative but no confirming tour found ---
+      // This happens when Twilio retries the webhook and the state was already
+      // moved to "received" before this message arrived.
+      if (isAffirmative) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: recentlyReceived } = await supabase
+          .from("tours")
+          .select("id")
+          .eq("tour_date", today)
+          .eq("driver_id", driver.id)
+          .eq("rollkarte_status", "received")
+          .eq("rollkarte_source", "whatsapp")
+          .gte("rollkarte_answered_at", fiveMinutesAgo)
+          .maybeSingle();
+        if (recentlyReceived) {
+          await sendReply(from, getRollkarteConfirmedMessage(driver.first_name));
+          return new Response("OK", { status: 200 });
+        }
       }
 
       // --- Extract rollkarte from natural-language reply ---
