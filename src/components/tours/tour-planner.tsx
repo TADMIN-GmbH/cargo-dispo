@@ -348,7 +348,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
                         </td>
                         <td className="px-6 py-4 text-right text-sm whitespace-nowrap">
                           {t.actual_km != null
-                            ? <span className="font-mono font-semibold text-blue-700">{t.actual_km} km</span>
+                            ? <span className="font-mono font-semibold text-blue-700">{Number(t.actual_km).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km</span>
                             : <span className="text-gray-300">–</span>}
                         </td>
                         <td className="px-6 py-4 text-right">
