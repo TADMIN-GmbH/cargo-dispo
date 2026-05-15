@@ -174,6 +174,19 @@ export async function POST(request: NextRequest) {
     .maybeSingle();
 
   if (driver) {
+    // ── Join-Code erkennen (Twilio Sandbox: "join <keyword>") ────────────
+    if (/^join\s+\S+/i.test(bodyText.trim())) {
+      await supabase
+        .from("drivers")
+        .update({ whatsapp_joined_at: new Date().toISOString() })
+        .eq("id", driver.id);
+      await sendReply(
+        from,
+        `✅ Hallo ${driver.first_name}! Du bist jetzt mit WhatsApp verbunden und erhältst täglich deine Rollkarten-Anfrage.`
+      );
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+    }
+
     // Compute affirmative/negative at driver level so they're available
     // in ALL branches below — including the outer fallback after driverTours check.
     // NOTE: emoji above U+FFFF need the `u` flag — separate regex for safety.

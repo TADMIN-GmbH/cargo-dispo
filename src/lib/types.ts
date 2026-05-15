@@ -50,6 +50,7 @@ export interface Driver {
   current_vehicle_id?: string;
   current_vehicle?: Vehicle;
   rollkarte_whatsapp_enabled?: boolean;
+  whatsapp_joined_at?: string | null;
   notes?: string;
   created_at: string;
 }

@@ -240,16 +240,16 @@ export function DriverList({ initialDrivers, availableVehicles }: DriverListProp
                             <span className="font-medium text-gray-900">{d.first_name} {d.last_name}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-sm text-gray-600">
+                        <td className="px-6 py-4 text-sm">
                           {d.phone ? (
                             <a
                               href={`tel:${d.phone}`}
-                              className={`flex items-center gap-1 hover:text-blue-600 ${d.rollkarte_whatsapp_enabled ? "text-green-600 font-medium" : ""}`}
+                              className="flex items-center gap-1.5 hover:underline"
                             >
-                              {d.rollkarte_whatsapp_enabled
-                                ? <MessageCircle className="w-3 h-3 text-green-600" />
-                                : <Phone className="w-3 h-3" />}
-                              {d.phone}
+                              <MessageCircle className={`w-3.5 h-3.5 shrink-0 ${d.rollkarte_whatsapp_enabled ? "text-green-500" : "text-gray-300"}`} />
+                              <span className={d.rollkarte_whatsapp_enabled && d.whatsapp_joined_at ? "text-green-600 font-medium" : "text-gray-400"}>
+                                {d.phone}
+                              </span>
                             </a>
                           ) : <span className="text-gray-300">–</span>}
                         </td>
