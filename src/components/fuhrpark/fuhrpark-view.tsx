@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Fuel, Receipt, Upload, Loader2, CheckCircle, AlertCircle, X } from "lucide-react";
+import { useState } from "react";
+import { Fuel, Receipt } from "lucide-react";
 import { usePortal, accentClasses } from "@/lib/portal-context";
 import { cn } from "@/lib/utils";
+import { UploadCenter } from "./upload-center";
 
 interface FuelInvoice {
   id: string;
@@ -25,15 +26,6 @@ interface MautInvoice {
   total_gross: number;
 }
 
-interface UploadResult {
-  success: boolean;
-  internal_id?: string;
-  transactions?: number;
-  matched?: number;
-  unmatched?: number;
-  total_gross?: number;
-  error?: string;
-}
 
 function formatEur(val: number | null): string {
   if (val == null) return "–";
@@ -54,40 +46,12 @@ export function FuhrparkView({
 }) {
   const { accentColor } = usePortal();
   const [fuelInvoices, setFuelInvoices] = useState(initialFuelInvoices);
-  const [activeTab, setActiveTab] = useState<"kraftstoff" | "maut">("kraftstoff");
+  const [activeTab, setActiveTab] = useState<"upload" | "kraftstoff" | "maut">("upload");
 
-  const [fuelCsv, setFuelCsv] = useState<File | null>(null);
-  const [fuelPdf, setFuelPdf] = useState<File | null>(null);
-  const [fuelUploading, setFuelUploading] = useState(false);
-  const [fuelResult, setFuelResult] = useState<UploadResult | null>(null);
-  const fuelCsvRef = useRef<HTMLInputElement>(null);
-  const fuelPdfRef = useRef<HTMLInputElement>(null);
-
-  async function handleFuelUpload() {
-    if (!fuelCsv) return;
-    setFuelUploading(true);
-    setFuelResult(null);
-    const fd = new FormData();
-    fd.append("csv", fuelCsv);
-    if (fuelPdf) fd.append("pdf", fuelPdf);
-    try {
-      const res = await fetch("/api/fuhrpark/fuel", { method: "POST", body: fd });
-      const data = await res.json();
-      setFuelResult(data);
-      if (data.success) {
-        const listRes = await fetch("/api/fuhrpark/fuel");
-        const list = await listRes.json();
-        setFuelInvoices(list);
-        setFuelCsv(null);
-        setFuelPdf(null);
-        if (fuelCsvRef.current) fuelCsvRef.current.value = "";
-        if (fuelPdfRef.current) fuelPdfRef.current.value = "";
-      }
-    } catch {
-      setFuelResult({ success: false, error: "Netzwerkfehler" });
-    } finally {
-      setFuelUploading(false);
-    }
+  async function refreshFuelInvoices() {
+    const res = await fetch("/api/fuhrpark/fuel");
+    const list = await res.json();
+    setFuelInvoices(list);
   }
 
   return (
@@ -105,112 +69,36 @@ export function FuhrparkView({
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-gray-200">
-        {(["kraftstoff", "maut"] as const).map((tab) => (
+        {([
+          { key: "upload", label: "Upload" },
+          { key: "kraftstoff", label: "Kraftstoff" },
+          { key: "maut", label: "Maut" },
+        ] as const).map(({ key, label }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            key={key}
+            onClick={() => setActiveTab(key)}
             className={cn(
               "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-              activeTab === tab
+              activeTab === key
                 ? cn("border-current", accentClasses.tab[accentColor])
                 : "border-transparent text-gray-500 hover:text-gray-700"
             )}
           >
-            {tab === "kraftstoff" ? "Kraftstoff" : "Maut"}
+            {label}
           </button>
         ))}
       </div>
 
+      {/* Upload Tab */}
+      {activeTab === "upload" && (
+        <div className="bg-white border border-gray-200 rounded-xl p-6">
+          <UploadCenter onDone={refreshFuelInvoices} />
+        </div>
+      )}
+
       {/* Kraftstoff Tab */}
       {activeTab === "kraftstoff" && (
         <div className="space-y-6">
-          {/* Upload Card */}
-          <div className="bg-white border border-gray-200 rounded-xl p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Upload className="h-4 w-4" />
-              Rechnung hochladen
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  CSV-Datei <span className="text-red-500">*</span>
-                </label>
-                <input
-                  ref={fuelCsvRef}
-                  type="file"
-                  accept=".csv"
-                  onChange={(e) => setFuelCsv(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-gray-300 file:text-sm file:bg-white file:text-gray-700 hover:file:bg-gray-50"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  PDF-Rechnung (optional)
-                </label>
-                <input
-                  ref={fuelPdfRef}
-                  type="file"
-                  accept=".pdf"
-                  onChange={(e) => setFuelPdf(e.target.files?.[0] ?? null)}
-                  className="block w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border file:border-gray-300 file:text-sm file:bg-white file:text-gray-700 hover:file:bg-gray-50"
-                />
-              </div>
-            </div>
-            <div className="mt-4">
-              <button
-                onClick={handleFuelUpload}
-                disabled={!fuelCsv || fuelUploading}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                  accentClasses.button[accentColor]
-                )}
-              >
-                {fuelUploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-                {fuelUploading ? "Wird verarbeitet…" : "Hochladen & verarbeiten"}
-              </button>
-            </div>
-
-            {fuelResult && (
-              <div
-                className={cn(
-                  "mt-4 p-4 rounded-lg flex items-start gap-3",
-                  fuelResult.success
-                    ? "bg-green-50 border border-green-200"
-                    : "bg-red-50 border border-red-200"
-                )}
-              >
-                {fuelResult.success ? (
-                  <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                ) : (
-                  <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0" />
-                )}
-                <div className="flex-1 text-sm">
-                  {fuelResult.success ? (
-                    <>
-                      <p className="font-medium text-green-800">
-                        Rechnung {fuelResult.internal_id} importiert
-                      </p>
-                      <p className="text-green-700 mt-0.5">
-                        {fuelResult.transactions} Transaktionen · {fuelResult.matched} Fahrzeuge zugeordnet
-                        {fuelResult.unmatched ? ` · ${fuelResult.unmatched} nicht zugeordnet` : ""}
-                        {" · "}Gesamt: {formatEur(fuelResult.total_gross ?? null)}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-red-800">{fuelResult.error}</p>
-                  )}
-                </div>
-                <button onClick={() => setFuelResult(null)}>
-                  <X className="h-4 w-4 text-gray-400" />
-                </button>
-              </div>
-            )}
-          </div>
-
           {/* Invoice List */}
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100">
