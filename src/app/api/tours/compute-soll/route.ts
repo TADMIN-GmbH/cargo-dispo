@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 /**
  * POST /api/tours/compute-soll
  * Computes soll_netto for all tours since a given date (default 2026-01-01)

@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+export const dynamic = "force-dynamic";
 
 const BGL_URL =
   "https://www.bgl-ev.de/wp-content/uploads/simple-file-list/Dieselpreisinformationen/dieselpreisinfo-grossverbraucher.pdf";
@@ -17,6 +14,11 @@ const BGL_URL =
  * We store the month the data refers to (not the publication month).
  */
 export async function POST() {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+
   try {
     const pdfBuffer = await fetch(BGL_URL, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; cargo-dispo/1.0)" },
