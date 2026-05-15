@@ -7,7 +7,7 @@ const adminSupabase = createClient(
 );
 
 export default async function KostenPage() {
-  const [{ data: fuelInvoices }, { data: mautInvoices }, { data: repairInvoices }] =
+  const [{ data: fuelInvoices }, { data: mautInvoices }, { data: rawRepair }] =
     await Promise.all([
       adminSupabase.from("fuel_invoices").select("*").order("invoice_date", { ascending: false }),
       adminSupabase.from("maut_invoices").select("*").order("period_from", { ascending: false }),
@@ -17,11 +17,17 @@ export default async function KostenPage() {
         .order("invoice_date", { ascending: false }),
     ]);
 
+  // Supabase returns joined relations as arrays — normalize to single object
+  const repairInvoices = (rawRepair ?? []).map((r: any) => ({
+    ...r,
+    vehicle: Array.isArray(r.vehicle) ? (r.vehicle[0] ?? null) : r.vehicle,
+  }));
+
   return (
     <KostenView
       fuelInvoices={fuelInvoices ?? []}
       mautInvoices={mautInvoices ?? []}
-      repairInvoices={repairInvoices ?? []}
+      repairInvoices={repairInvoices}
     />
   );
 }

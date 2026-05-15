@@ -7,13 +7,16 @@ const adminSupabase = createClient(
 );
 
 export default async function ReparaturenPage() {
-  const { data: invoices } = await adminSupabase
+  const { data: rawInvoices } = await adminSupabase
     .from("repair_invoices")
-    .select(`
-      *,
-      vehicle:vehicles(license_plate, type)
-    `)
+    .select(`*, vehicle:vehicles(license_plate, type)`)
     .order("invoice_date", { ascending: false });
 
-  return <ReparaturenView invoices={invoices ?? []} />;
+  // Supabase returns joined relations as arrays — normalize to single object
+  const invoices = (rawInvoices ?? []).map((r: any) => ({
+    ...r,
+    vehicle: Array.isArray(r.vehicle) ? (r.vehicle[0] ?? null) : r.vehicle,
+  }));
+
+  return <ReparaturenView invoices={invoices} />;
 }
