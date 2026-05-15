@@ -1,0 +1,19 @@
+import { createClient } from "@supabase/supabase-js";
+import { ReparaturenView } from "@/components/fuhrpark/reparaturen-view";
+
+const adminSupabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+);
+
+export default async function ReparaturenPage() {
+  const { data: invoices } = await adminSupabase
+    .from("repair_invoices")
+    .select(`
+      *,
+      vehicle:vehicles(license_plate, type)
+    `)
+    .order("invoice_date", { ascending: false });
+
+  return <ReparaturenView invoices={invoices ?? []} />;
+}
