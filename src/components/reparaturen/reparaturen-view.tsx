@@ -416,19 +416,15 @@ export function ReparaturenView({ invoices }: ReparaturenViewProps) {
           setQueue((q) => q.map((e, idx) => idx === i ? { ...e, status: "error", error: data.error ?? "Fehler" } : e));
         } else {
           setQueue((q) => q.map((e, idx) => idx === i ? { ...e, status: "done" } : e));
+          if (data.record) {
+            setAllInvoices((prev) => [data.record, ...prev]);
+          }
         }
       } catch (err: unknown) {
         setQueue((q) => q.map((e, idx) => idx === i ? { ...e, status: "error", error: err instanceof Error ? err.message : "Fehler" } : e));
       }
     }
     processingRef.current = false;
-    // Reload once all done
-    setQueue((q) => {
-      if (q.every((e) => e.status === "done" || e.status === "error")) {
-        setTimeout(() => window.location.reload(), 1200);
-      }
-      return q;
-    });
   }, []);
 
   function addFiles(files: FileList | File[]) {
