@@ -2,7 +2,8 @@
 
 import { useState, useRef } from "react";
 import { Fuel, Receipt, Upload, Loader2, CheckCircle, AlertCircle, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { usePortal, accentClasses } from "@/lib/portal-context";
+import { cn } from "@/lib/utils";
 
 interface FuelInvoice {
   id: string;
@@ -46,15 +47,15 @@ function formatDate(d: string | null): string {
 
 export function FuhrparkView({
   fuelInvoices: initialFuelInvoices,
-  mautInvoices: initialMautInvoices,
+  mautInvoices: _mautInvoices,
 }: {
   fuelInvoices: FuelInvoice[];
   mautInvoices: MautInvoice[];
 }) {
+  const { accentColor } = usePortal();
   const [fuelInvoices, setFuelInvoices] = useState(initialFuelInvoices);
   const [activeTab, setActiveTab] = useState<"kraftstoff" | "maut">("kraftstoff");
 
-  // Fuel upload state
   const [fuelCsv, setFuelCsv] = useState<File | null>(null);
   const [fuelPdf, setFuelPdf] = useState<File | null>(null);
   const [fuelUploading, setFuelUploading] = useState(false);
@@ -66,17 +67,14 @@ export function FuhrparkView({
     if (!fuelCsv) return;
     setFuelUploading(true);
     setFuelResult(null);
-
     const fd = new FormData();
     fd.append("csv", fuelCsv);
     if (fuelPdf) fd.append("pdf", fuelPdf);
-
     try {
       const res = await fetch("/api/fuhrpark/fuel", { method: "POST", body: fd });
       const data = await res.json();
       setFuelResult(data);
       if (data.success) {
-        // Reload invoices
         const listRes = await fetch("/api/fuhrpark/fuel");
         const list = await listRes.json();
         setFuelInvoices(list);
@@ -94,9 +92,10 @@ export function FuhrparkView({
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <div className="p-2 bg-blue-100 rounded-lg">
-          <Fuel className="h-6 w-6 text-blue-600" />
+        <div className={cn("p-2 rounded-lg", accentClasses.iconBg[accentColor])}>
+          <Fuel className="h-6 w-6" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Fuhrpark</h1>
@@ -110,11 +109,12 @@ export function FuhrparkView({
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium capitalize border-b-2 transition-colors ${
+            className={cn(
+              "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
               activeTab === tab
-                ? "border-blue-600 text-blue-600"
+                ? cn("border-current", accentClasses.tab[accentColor])
                 : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
+            )}
           >
             {tab === "kraftstoff" ? "Kraftstoff" : "Maut"}
           </button>
@@ -157,10 +157,13 @@ export function FuhrparkView({
               </div>
             </div>
             <div className="mt-4">
-              <Button
+              <button
                 onClick={handleFuelUpload}
                 disabled={!fuelCsv || fuelUploading}
-                className="flex items-center gap-2"
+                className={cn(
+                  "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                  accentClasses.button[accentColor]
+                )}
               >
                 {fuelUploading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -168,17 +171,17 @@ export function FuhrparkView({
                   <Upload className="h-4 w-4" />
                 )}
                 {fuelUploading ? "Wird verarbeitet…" : "Hochladen & verarbeiten"}
-              </Button>
+              </button>
             </div>
 
-            {/* Result */}
             {fuelResult && (
               <div
-                className={`mt-4 p-4 rounded-lg flex items-start gap-3 ${
+                className={cn(
+                  "mt-4 p-4 rounded-lg flex items-start gap-3",
                   fuelResult.success
                     ? "bg-green-50 border border-green-200"
                     : "bg-red-50 border border-red-200"
-                }`}
+                )}
               >
                 {fuelResult.success ? (
                   <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
@@ -245,22 +248,14 @@ export function FuhrparkView({
                       </td>
                       <td className="px-6 py-4 text-center flex justify-center gap-2">
                         {inv.pdf_url && (
-                          <a
-                            href={inv.pdf_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-blue-600 hover:underline"
-                          >
+                          <a href={inv.pdf_url} target="_blank" rel="noopener noreferrer"
+                            className={cn("text-xs hover:underline", accentClasses.text[accentColor])}>
                             PDF
                           </a>
                         )}
                         {inv.csv_url && (
-                          <a
-                            href={inv.csv_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-green-600 hover:underline"
-                          >
+                          <a href={inv.csv_url} target="_blank" rel="noopener noreferrer"
+                            className="text-xs text-green-600 hover:underline">
                             CSV
                           </a>
                         )}
@@ -270,9 +265,7 @@ export function FuhrparkView({
                 </tbody>
                 <tfoot className="bg-gray-50 border-t border-gray-200">
                   <tr>
-                    <td colSpan={2} className="px-6 py-3 text-xs font-medium text-gray-500">
-                      Gesamt
-                    </td>
+                    <td colSpan={2} className="px-6 py-3 text-xs font-medium text-gray-500">Gesamt</td>
                     <td className="px-6 py-3 text-right text-sm font-semibold text-gray-900">
                       {formatEur(fuelInvoices.reduce((s, i) => s + (i.total_net ?? 0), 0))}
                     </td>
