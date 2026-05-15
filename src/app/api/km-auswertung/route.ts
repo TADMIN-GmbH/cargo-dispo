@@ -41,11 +41,11 @@ export async function GET(req: NextRequest) {
   // Fetch tours in period with vehicle info
   const { data: tours, error: toursErr } = await supabase
     .from("tours")
-    .select("id, vehicle_id, actual_km, date")
+    .select("id, vehicle_id, actual_km, tour_date")
     .eq("customer_id", customer_id)
     .not("vehicle_id", "is", null)
-    .gte("date", fmt(period_from))
-    .lte("date", fmt(period_to));
+    .gte("tour_date", fmt(period_from))
+    .lte("tour_date", fmt(period_to));
 
   if (toursErr) {
     return NextResponse.json({ error: toursErr.message }, { status: 500 });
