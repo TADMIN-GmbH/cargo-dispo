@@ -18,6 +18,7 @@ import {
   Receipt,
   Route,
   Wrench,
+  Fuel,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/gutschriften", icon: Receipt, label: "Gutschriften" },
   { href: "/km-auswertung", icon: Route, label: "KM-Auswertung" },
   { href: "/reparaturen", icon: Wrench, label: "Reparaturen" },
+  { href: "/fuhrpark", icon: Fuel, label: "Fuhrpark" },
 ];
 
 const adminItems = [
