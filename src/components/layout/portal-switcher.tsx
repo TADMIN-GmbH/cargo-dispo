@@ -96,6 +96,8 @@ export function PortalSwitcher({ currentPortalId, collapsed }: PortalSwitcherPro
                   key={portal.id}
                   href={portal.href}
                   onClick={() => setOpen(false)}
+                  target={portal.external ? "_blank" : undefined}
+                  rel={portal.external ? "noopener noreferrer" : undefined}
                   className={cn(
                     "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
                     isActive

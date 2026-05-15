@@ -1,15 +1,17 @@
 import {
   MapPin,
   Truck,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 
 export interface Portal {
   id: string;
   label: string;
-  href: string;         // root path of the portal
+  href: string;         // root path of the portal (or external URL)
   accentColor: string;  // Tailwind color name (blue, red, green, …)
   icon: LucideIcon;
+  external?: boolean;   // opens in new tab
 }
 
 export const portals: Portal[] = [
@@ -27,8 +29,15 @@ export const portals: Portal[] = [
     accentColor: "red",
     icon: Truck,
   },
+  {
+    id: "werkstatt",
+    label: "Werkstatt",
+    href: process.env.NEXT_PUBLIC_WERKSTATT_URL ?? "https://werkstatt-web.vercel.app/dashboard",
+    accentColor: "green",
+    icon: Wrench,
+    external: true,
+  },
   // Weitere Portale hier einfügen:
-  // { id: "abrechnung", label: "Abrechnung", href: "/abrechnung", accentColor: "green", icon: Receipt },
 ];
 
 // Tailwind safelist — diese Klassen müssen statisch vorkommen damit Purging sie nicht entfernt
