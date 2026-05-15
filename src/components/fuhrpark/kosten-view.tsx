@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { BarChart3, Fuel, Receipt, Wrench } from "lucide-react";
 import { usePortal, accentClasses } from "@/lib/portal-context";
 import { cn } from "@/lib/utils";
