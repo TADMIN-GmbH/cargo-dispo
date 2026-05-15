@@ -19,16 +19,33 @@ function makeSupabase() {
   );
 }
 
-// Normalize a phone number to both its E.164 form (+49...) and 0... form
-function phoneVariants(phone: string): { e164: string; local: string } {
+// Normalize a phone number and return all plausible variants for DB matching
+function phoneVariants(phone: string): { e164: string; local: string; all: string[] } {
   const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("49")) {
-    return { e164: `+${digits}`, local: `0${digits.slice(2)}` };
+  let e164: string;
+  let local: string;
+
+  if (digits.startsWith("49") && digits.length > 10) {
+    e164 = `+${digits}`;
+    local = `0${digits.slice(2)}`;
+  } else if (digits.startsWith("0")) {
+    e164 = `+49${digits.slice(1)}`;
+    local = digits;
+  } else {
+    e164 = `+49${digits}`;
+    local = `0${digits}`;
   }
-  if (digits.startsWith("0")) {
-    return { e164: `+49${digits.slice(1)}`, local: digits };
-  }
-  return { e164: `+${digits}`, local: digits };
+
+  // All variants a user might have stored: with/without +, with/without leading 0
+  const all = Array.from(new Set([
+    e164,                          // +491732431822
+    local,                         // 01732431822
+    digits,                        // 491732431822
+    `+${digits}`,                  // +491732431822 (same as e164 if already +49)
+    e164.replace("+49", "0049"),   // 00491732431822
+  ]));
+
+  return { e164, local, all };
 }
 
 /**
@@ -79,11 +96,11 @@ async function isAdminSender(
   supabase: ReturnType<typeof makeSupabase>,
   senderPhone: string
 ): Promise<boolean> {
-  const { e164, local } = phoneVariants(senderPhone);
+  const { all } = phoneVariants(senderPhone);
   const { data } = await supabase
     .from("profiles")
     .select("id")
-    .or(`whatsapp_phone.eq.${e164},whatsapp_phone.eq.${local}`)
+    .or(all.map((v) => `whatsapp_phone.eq.${v}`).join(","))
     .eq("role", "admin")
     .maybeSingle();
   return !!data;
@@ -164,13 +181,13 @@ export async function POST(request: NextRequest) {
   // STEP 1: Check if sender is a known driver with a tour today
   // =========================================================
   const senderPhone = from.replace(/^whatsapp:/, "");
-  const { e164: senderE164, local: senderLocal } = phoneVariants(senderPhone);
+  const { e164: senderE164, local: senderLocal, all: senderAll } = phoneVariants(senderPhone);
   const today = new Date().toISOString().split("T")[0];
 
   const { data: driver } = await supabase
     .from("drivers")
     .select("id, first_name, last_name")
-    .or(`phone.eq.${senderE164},phone.eq.${senderLocal}`)
+    .or(senderAll.map((v) => `phone.eq.${v}`).join(","))
     .maybeSingle();
 
   if (driver) {
