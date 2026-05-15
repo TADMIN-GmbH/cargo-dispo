@@ -24,16 +24,18 @@ async function getTadminToken(): Promise<string> {
   return data.access_token as string;
 }
 
+interface TelematicsPing {
+  telemetry?: {
+    vehicle?: { metrics?: { mileage?: number | null } };
+    box?: { mileage?: number | null };
+    tachograph?: { mileage?: number | null };
+    metrics?: { mileage?: number | null };
+  };
+}
+
 interface TelematicsResponse {
-  data?: Array<{
-    telemetry?: {
-      vehicle?: {
-        metrics?: {
-          mileage?: number | null;
-        };
-      };
-    };
-  }>;
+  count?: number;
+  pings?: TelematicsPing[];
 }
 
 async function fetchTelematics(
@@ -59,10 +61,15 @@ async function fetchTelematics(
 }
 
 function extractMileages(response: TelematicsResponse): number[] {
-  if (!Array.isArray(response.data)) return [];
-  return response.data
-    .map(ping => ping?.telemetry?.vehicle?.metrics?.mileage)
-    .filter((m): m is number => typeof m === "number");
+  if (!Array.isArray(response.pings)) return [];
+  return response.pings
+    .map(ping =>
+      ping?.telemetry?.vehicle?.metrics?.mileage ??
+      ping?.telemetry?.tachograph?.mileage ??
+      ping?.telemetry?.box?.mileage ??
+      ping?.telemetry?.metrics?.mileage
+    )
+    .filter((m): m is number => typeof m === "number" && m > 0);
 }
 
 function computeTageskilometer(mileages: number[]): number | null {
