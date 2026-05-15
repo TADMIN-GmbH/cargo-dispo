@@ -8,6 +8,10 @@
     {
       "path": "/api/cron/diesel-price",
       "schedule": "0 6 26 * *"
+    },
+    {
+      "path": "/api/cron/telematics",
+      "schedule": "0 3 * * *"
     }
   ]
 }

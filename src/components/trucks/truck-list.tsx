@@ -56,6 +56,7 @@ const emptyVehicle = {
   height_m:          "" as string | number,
   payload_kg:        "" as string | number,
   notes:             "",
+  tadmin_vehicle_id: "" as string | number,
 };
 
 interface TruckListProps {
@@ -131,6 +132,7 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       height_m:          v.height_m          ?? ("" as string | number),
       payload_kg:        v.payload_kg        ?? ("" as string | number),
       notes:             v.notes             ?? "",
+      tadmin_vehicle_id: (v as any).tadmin_vehicle_id ?? ("" as string | number),
     });
     const currentDriver = (v as any).current_driver;
     if (currentDriver && !availableDrivers.find(d => d.id === currentDriver.id)) {
@@ -167,6 +169,7 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
       height_m:          form.height_m  !== "" ? Number(form.height_m)  : null,
       payload_kg:        form.payload_kg !== "" ? Number(form.payload_kg): null,
       notes:             form.notes || null,
+      tadmin_vehicle_id: form.tadmin_vehicle_id !== "" ? Number(form.tadmin_vehicle_id) : null,
     };
 
     let savedId: string | null = editing?.id ?? null;
@@ -702,6 +705,18 @@ export function TruckList({ initialVehicles, availableDrivers }: TruckListProps)
             <div className="space-y-1.5">
               <Label>Notizen</Label>
               <Textarea rows={2} placeholder="Interne Notizen..." value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+            </div>
+
+            {/* TADMIN Telematics */}
+            <div className="space-y-1.5">
+              <Label>TADMIN Fahrzeug-ID</Label>
+              <Input
+                type="number"
+                placeholder="z.B. 25"
+                value={form.tadmin_vehicle_id}
+                onChange={e => setForm({ ...form, tadmin_vehicle_id: e.target.value as unknown as number })}
+              />
+              <p className="text-[11px] text-gray-400">Wird täglich für automatische KM-Erfassung verwendet</p>
             </div>
 
             {saveError && (
