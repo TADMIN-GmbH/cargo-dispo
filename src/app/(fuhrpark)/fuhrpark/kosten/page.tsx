@@ -13,7 +13,7 @@ export default async function KostenPage() {
       adminSupabase.from("maut_invoices").select("*").order("period_from", { ascending: false }),
       adminSupabase
         .from("repair_invoices")
-        .select("id, invoice_number, invoice_date, total_gross, vehicle:vehicles(license_plate)")
+        .select("id, invoice_number, invoice_date, total_gross, vehicle:vehicles(license_plate, type)")
         .order("invoice_date", { ascending: false }),
     ]);
 

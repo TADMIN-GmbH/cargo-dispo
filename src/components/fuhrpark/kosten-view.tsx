@@ -21,7 +21,7 @@ interface RepairInvoice {
   id: string;
   invoice_date: string | null;
   total_gross: number | null;
-  vehicle: { license_plate: string } | null;
+  vehicle: { license_plate: string; type: string } | null;
 }
 
 function formatEur(val: number): string {
