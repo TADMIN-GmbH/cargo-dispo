@@ -87,8 +87,19 @@ export function UploadCenter({ onDone }: { onDone?: () => void }) {
         }
 
       } else if (entry.detectedType === "maut") {
-        // Maut-Import folgt
-        updateEntry(entry.id, { status: "error", error: "Maut-Import noch nicht implementiert" });
+        const fd = new FormData();
+        fd.append("csv", entry.file);
+        const res = await fetch("/api/fuhrpark/maut", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.success) {
+          updateEntry(entry.id, {
+            status: "done",
+            result: `${data.transactions} Fahrten · ${data.matched} Fahrzeuge · ${formatEur(data.total_eur)}`,
+          });
+          onDone?.();
+        } else {
+          updateEntry(entry.id, { status: "error", error: data.error ?? "Fehler beim Verarbeiten" });
+        }
 
       } else {
         updateEntry(entry.id, { status: "error", error: "Dateiformat nicht erkannt" });

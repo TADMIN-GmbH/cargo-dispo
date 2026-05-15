@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
     headers.includes("achsklasse") ||
     headers.includes("mautbetrag") ||
     headers.includes("streckenabschnitt") ||
-    headers.includes("benutzungszeitpunkt")
+    headers.includes("benutzungszeitpunkt") ||
+    headers.includes("kfz-kennz.") ||
+    (headers.includes("buchungsnummer") && headers.includes("auffahrt"))
   ) {
     return NextResponse.json({ type: "maut", confidence: "high" });
   }
