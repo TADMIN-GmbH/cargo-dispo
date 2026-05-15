@@ -280,6 +280,7 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Rollkarte</th>
                   <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">GU/RE-Nr.</th>
                   <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Soll/Tag</th>
+                  <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Ist-KM</th>
                   <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Aktionen</th>
                 </tr>
               </thead>
@@ -344,9 +345,11 @@ export function TourPlanner({ initialTours, drivers, vehicles, customers, locati
                           {t.soll_netto != null
                             ? <span className="font-mono font-semibold text-emerald-700">{t.soll_netto.toFixed(2)} €</span>
                             : <span className="text-gray-300">–</span>}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm whitespace-nowrap">
                           {t.actual_km != null
-                            ? <span className="block font-mono text-xs text-gray-400">{t.actual_km} km</span>
-                            : null}
+                            ? <span className="font-mono font-semibold text-blue-700">{t.actual_km} km</span>
+                            : <span className="text-gray-300">–</span>}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-2">
