@@ -29,7 +29,17 @@ export default async function DashboardLayout({
     .single();
 
   const userRole = (profile?.role ?? "employee") as "admin" | "employee";
-  const userName = profile?.full_name ?? user.email ?? "Benutzer";
+
+  // Force new users to complete their profile before accessing the portal.
+  // "incomplete" = no name, or name auto-set to the email-prefix by a DB trigger.
+  const rawName = profile?.full_name ?? "";
+  const emailPrefix = (user.email ?? "").split("@")[0];
+  const needsSetup = !rawName || rawName === emailPrefix;
+  if (needsSetup) {
+    redirect("/auth/accept-invite");
+  }
+
+  const userName = rawName || user.email || "Benutzer";
 
   const cookieStore = await cookies();
   const appDate = cookieStore.get("app_date")?.value ?? new Date().toISOString().split("T")[0];

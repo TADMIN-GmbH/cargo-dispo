@@ -12,48 +12,40 @@ export default function AcceptInvitePage() {
   const router = useRouter();
   const supabase = createClient();
 
-  const [step, setStep] = useState<"loading" | "form" | "done" | "error">("loading");
+  const [ready, setReady] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [userEmail, setUserEmail] = useState("");
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
-    // Supabase client automatically exchanges the invite token from the URL fragment/hash
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        setUserEmail(session.user.email ?? "");
-        setStep("form");
-      } else if (event === "INITIAL_SESSION" && session?.user) {
-        // Already signed in from invite link
-        setUserEmail(session.user.email ?? "");
-        setStep("form");
-      }
-    });
+    // The Supabase client automatically picks up the session from the URL hash
+    // (magic link / invite link). We just need to wait for it.
+    async function init() {
+      // Give the client a moment to process the hash fragment
+      await new Promise((r) => setTimeout(r, 800));
 
-    // Also check immediately in case session is already set
-    supabase.auth.getSession().then(({ data: { session } }) => {
+      const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setUserEmail(session.user.email ?? "");
-        setStep("form");
+        setReady(true);
       } else {
-        // No session yet — might need a moment for token exchange
-        setTimeout(() => {
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session?.user) {
-              setUserEmail(session.user.email ?? "");
-              setStep("form");
-            } else {
-              setStep("error");
-            }
-          });
-        }, 1500);
+        // Maybe the session comes in via onAuthStateChange
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+          if (s?.user) {
+            setUserEmail(s.user.email ?? "");
+            setReady(true);
+            subscription.unsubscribe();
+          }
+        });
+        // After 4s with no session, something went wrong
+        setTimeout(() => setReady((r) => r || false), 4000);
       }
-    });
-
-    return () => subscription.unsubscribe();
+    }
+    init();
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -75,68 +67,56 @@ export default function AcceptInvitePage() {
 
     setSaving(true);
 
-    // Set password and update user metadata
-    const { error: updateError } = await supabase.auth.updateUser({
-      password,
-      data: { full_name: fullName.trim() },
-    });
-
-    if (updateError) {
-      setError("Fehler beim Speichern: " + updateError.message);
+    // Set password
+    const { error: pwError } = await supabase.auth.updateUser({ password });
+    if (pwError) {
+      setError("Fehler beim Setzen des Passworts: " + pwError.message);
       setSaving(false);
       return;
     }
 
-    // Update profile in DB
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      await supabase.from("profiles").upsert({
-        id: user.id,
-        full_name: fullName.trim(),
-      });
+    // Update name in profiles table via API
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ full_name: fullName.trim() }),
+    });
 
-      // Mark invite as accepted
-      await supabase
-        .from("invites")
-        .update({ accepted: true })
-        .eq("email", user.email ?? "");
+    if (!res.ok) {
+      const json = await res.json();
+      setError(json.error ?? "Fehler beim Speichern des Namens.");
+      setSaving(false);
+      return;
     }
 
-    setStep("done");
-    setTimeout(() => router.push("/"), 2000);
+    // Mark invite as accepted
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user?.email) {
+      await supabase.from("invites").update({ accepted: true }).eq("email", user.email);
+    }
+
+    setDone(true);
+    setTimeout(() => router.push("/"), 1500);
   }
 
-  if (step === "loading") {
+  if (done) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
-        <div className="text-center text-white">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-400" />
-          <p className="text-gray-400">Einladung wird überprüft...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "error") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
-          <div className="text-red-500 text-4xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Link ungültig oder abgelaufen</h2>
-          <p className="text-gray-500 text-sm mb-6">Bitte fordere eine neue Einladung beim Administrator an.</p>
-          <Button onClick={() => router.push("/login")}>Zum Login</Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "done") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-4">
         <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
           <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Account eingerichtet!</h2>
           <p className="text-gray-500 text-sm">Du wirst weitergeleitet...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+        <div className="text-center text-white">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-blue-400" />
+          <p className="text-gray-400">Wird geladen...</p>
         </div>
       </div>
     );
@@ -204,7 +184,7 @@ export default function AcceptInvitePage() {
             )}
 
             <Button type="submit" className="w-full" disabled={saving} size="lg">
-              {saving ? "Wird gespeichert..." : "Account einrichten"}
+              {saving ? "Wird gespeichert..." : "Account einrichten & Portal öffnen"}
             </Button>
           </form>
         </div>
