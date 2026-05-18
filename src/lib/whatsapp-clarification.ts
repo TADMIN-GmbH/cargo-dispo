@@ -155,17 +155,24 @@ export async function findSimilarVehicles(
   supabase: any,
   plate: string
 ): Promise<Array<{ id: string; license_plate: string; type: string; status: string }>> {
-  const raw = plate.trim();
-  // Build multiple search patterns to handle spacing/dash variants
+  const raw = plate.trim().toUpperCase();
+
+  // Split into parts, sort by specificity: longer parts & numbers first
+  const parts = raw.split(/[\s-]+/).filter(Boolean).sort((a, b) => {
+    const aIsNum = /^\d+$/.test(a);
+    const bIsNum = /^\d+$/.test(b);
+    if (aIsNum !== bIsNum) return aIsNum ? -1 : 1; // numbers first
+    return b.length - a.length; // then longer parts first
+  });
+
+  // Build search patterns: full string first, then specific parts
   const patterns = Array.from(new Set([
-    raw,                                      // "HAM CK 900" as typed
-    raw.replace(/[\s-]+/g, " "),              // normalize multi-space
-    raw.replace(/[\s-]+/g, "-"),              // "HAM-CK-900"
-    raw.replace(/[\s-]+/g, ""),              // "HAMCK900" (without spaces)
-    ...raw.split(/[\s-]+/).filter(Boolean),  // ["HAM", "CK", "900"] each part
+    raw,                               // "HAM CK 900" exact
+    raw.replace(/[\s-]+/g, " "),       // normalized spacing
+    raw.replace(/[\s-]+/g, "-"),       // "HAM-CK-900"
+    ...parts,                          // ["900", "HAM", "CK"] — number first!
   ]));
 
-  // Try each pattern, collect unique results
   const seen = new Set<string>();
   const results: Array<{ id: string; license_plate: string; type: string; status: string }> = [];
 
@@ -176,11 +183,19 @@ export async function findSimilarVehicles(
       .select("id, license_plate, type, status")
       .ilike("license_plate", `%${p}%`)
       .limit(5);
+
+    // If searching by a short part like "HAM", only keep results that also contain
+    // another part of the input (to avoid false positives)
+    const otherParts = parts.filter((x) => x !== p);
     for (const v of data ?? []) {
-      if (!seen.has(v.id)) {
-        seen.add(v.id);
-        results.push(v);
+      if (seen.has(v.id)) continue;
+      // For short/generic patterns, verify the result also matches at least one other part
+      if (p.length <= 3 && otherParts.length > 0) {
+        const plate = v.license_plate.toUpperCase();
+        if (!otherParts.some((op) => plate.includes(op))) continue;
       }
+      seen.add(v.id);
+      results.push(v);
     }
     if (results.length >= 3) break;
   }
