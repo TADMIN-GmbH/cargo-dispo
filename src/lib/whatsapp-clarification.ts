@@ -148,25 +148,70 @@ export async function findSimilarCustomers(
   supabase: any,
   name: string
 ): Promise<Array<{ id: string; company_name: string }>> {
-  const { data } = await supabase
-    .from("customers")
-    .select("id, company_name")
-    .ilike("company_name", `%${name.trim()}%`)
-    .limit(3);
-  return data ?? [];
+  return findSimilarCustomersFlexible(supabase, name);
 }
 
 export async function findSimilarVehicles(
   supabase: any,
   plate: string
 ): Promise<Array<{ id: string; license_plate: string; type: string; status: string }>> {
-  const normalized = plate.trim().replace(/[\s-]/g, "");
-  const { data } = await supabase
-    .from("vehicles")
-    .select("id, license_plate, type, status")
-    .ilike("license_plate", `%${normalized}%`)
-    .limit(3);
-  return data ?? [];
+  const raw = plate.trim();
+  // Build multiple search patterns to handle spacing/dash variants
+  const patterns = Array.from(new Set([
+    raw,                                      // "HAM CK 900" as typed
+    raw.replace(/[\s-]+/g, " "),              // normalize multi-space
+    raw.replace(/[\s-]+/g, "-"),              // "HAM-CK-900"
+    raw.replace(/[\s-]+/g, ""),              // "HAMCK900" (without spaces)
+    ...raw.split(/[\s-]+/).filter(Boolean),  // ["HAM", "CK", "900"] each part
+  ]));
+
+  // Try each pattern, collect unique results
+  const seen = new Set<string>();
+  const results: Array<{ id: string; license_plate: string; type: string; status: string }> = [];
+
+  for (const p of patterns) {
+    if (!p || p.length < 2) continue;
+    const { data } = await supabase
+      .from("vehicles")
+      .select("id, license_plate, type, status")
+      .ilike("license_plate", `%${p}%`)
+      .limit(5);
+    for (const v of data ?? []) {
+      if (!seen.has(v.id)) {
+        seen.add(v.id);
+        results.push(v);
+      }
+    }
+    if (results.length >= 3) break;
+  }
+  return results.slice(0, 3);
+}
+
+export async function findSimilarCustomersFlexible(
+  supabase: any,
+  name: string
+): Promise<Array<{ id: string; company_name: string }>> {
+  const raw = name.trim();
+  const parts = raw.split(/\s+/).filter((p) => p.length >= 3);
+  const seen = new Set<string>();
+  const results: Array<{ id: string; company_name: string }> = [];
+
+  const patterns = Array.from(new Set([raw, ...parts]));
+  for (const p of patterns) {
+    const { data } = await supabase
+      .from("customers")
+      .select("id, company_name")
+      .ilike("company_name", `%${p}%`)
+      .limit(5);
+    for (const c of data ?? []) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        results.push(c);
+      }
+    }
+    if (results.length >= 3) break;
+  }
+  return results.slice(0, 3);
 }
 
 // ---------------------------------------------------------------------------
