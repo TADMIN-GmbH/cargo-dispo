@@ -7,13 +7,12 @@ function normalize(s: string) {
   return s.toLowerCase().replace(/[\s\-&.,]/g, "").replace(/gmbh|cokg|co\.kg|gmbh&co|&co/g, "");
 }
 
-// Admin client bypasses RLS — safe for server-only lookups
-const adminSupabase = createAdminClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export default async function GutschriftenPage() {
+  // Admin client bypasses RLS — safe for server-only lookups
+  const adminSupabase = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
   const supabase = await createClient();
 
   const [{ data: positionen }, { data: gutschriften }, { data: aliases }, { data: customers }, { data: vehicleEntries }] = await Promise.all([

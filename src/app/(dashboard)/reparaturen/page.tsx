@@ -1,12 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { ReparaturenView } from "@/components/reparaturen/reparaturen-view";
 
-const adminSupabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export default async function ReparaturenPage() {
+  const adminSupabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
   const { data: invoices } = await adminSupabase
     .from("repair_invoices")
     .select(`

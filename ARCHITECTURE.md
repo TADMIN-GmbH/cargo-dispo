@@ -71,19 +71,36 @@ Ohne `force-dynamic` bricht der Build mit `supabaseKey is required` oder ähnlic
 
 ### 2. Supabase NIEMALS auf Modulebene initialisieren
 
+Gilt für **API-Routen UND Server-Component-Pages**!
+
 **Falsch (bricht den Build):**
 ```ts
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, ...); // ❌
+// Auf Modulebene — ❌ in API-Routen UND in page.tsx!
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, ...);
+const adminSupabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, ...);
+
+export default async function MyPage() { ... }
+export async function GET() { ... }
 ```
 
-**Richtig (immer innerhalb der Handler-Funktion):**
+**Richtig — API-Routen (makeSupabase Pattern):**
 ```ts
 function makeSupabase() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
 export async function GET() {
-  const supabase = makeSupabase(); // ✅
+  const supabase = makeSupabase(); // ✅ innerhalb des Handlers
+}
+```
+
+**Richtig — Server-Component Pages:**
+```ts
+export default async function MyPage() {
+  const adminSupabase = createClient( // ✅ innerhalb der Funktion
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
   ...
 }
 ```
