@@ -10,10 +10,12 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 function refMonth(tourDate: string, lagMonths: number): string {
   const d = new Date(tourDate);
@@ -22,6 +24,7 @@ function refMonth(tourDate: string, lagMonths: number): string {
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = makeSupabase();
   const body = await req.json().catch(() => ({}));
   const since: string = body.since ?? "2026-01-01";
   const tourId: string | null = body.tour_id ?? null;

@@ -5,10 +5,12 @@ import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "crypto";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -69,6 +71,7 @@ interface Anomaly {
 }
 
 async function analyzeAnomalies(
+  supabase: ReturnType<typeof makeSupabase>,
   lineItems: LineItem[],
   vehicleId: string | null,
   licensePlate: string | null,
@@ -185,6 +188,7 @@ function determineAiStatus(anomalies: Anomaly[]): string {
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = makeSupabase();
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
@@ -253,7 +257,7 @@ export async function POST(req: NextRequest) {
     const amountBrutto: number | null = extracted.amount_brutto ?? null;
 
     // Run anomaly analysis
-    const anomalies = await analyzeAnomalies(lineItems, vehicleId, normalizedPlate, amountBrutto);
+    const anomalies = await analyzeAnomalies(supabase, lineItems, vehicleId, normalizedPlate, amountBrutto);
 
     // Duplicate detection: same invoice_number + supplier already in DB?
     const invoiceNumber: string | null = extracted.invoice_number ?? null;

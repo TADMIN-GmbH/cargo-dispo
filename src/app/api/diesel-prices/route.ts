@@ -3,13 +3,16 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // GET: list all diesel prices, newest first
 export async function GET() {
+  const supabase = makeSupabase();
   const { data, error } = await supabase
     .from("diesel_prices")
     .select("*")
@@ -21,6 +24,7 @@ export async function GET() {
 
 // POST: manual entry of a diesel price
 export async function POST(req: Request) {
+  const supabase = makeSupabase();
   const body = await req.json();
   const { month, price_brutto } = body;
   if (!month || !price_brutto) {

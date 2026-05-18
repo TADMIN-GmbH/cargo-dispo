@@ -3,16 +3,19 @@ export const dynamic = "force-dynamic";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 const EN2X_URL = "https://en2x.de/service/statistiken/verbraucherpreise/";
 
 // Fetches the current month's diesel price from en2x.de and stores it.
 // Called by cron on 26th of month, or manually from settings.
 export async function POST() {
+  const supabase = makeSupabase();
   try {
     const html = await fetch(EN2X_URL, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; cargo-dispo/1.0)" },

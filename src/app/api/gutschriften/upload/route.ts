@@ -5,10 +5,12 @@ import { createClient } from "@supabase/supabase-js";
 import Anthropic from "@anthropic-ai/sdk";
 import { randomUUID } from "crypto";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -62,6 +64,7 @@ Regeln:
 - Alle Positionen aus ALLEN Seiten erfassen — keine auslassen`;
 
 export async function POST(req: NextRequest) {
+  const supabase = makeSupabase();
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
