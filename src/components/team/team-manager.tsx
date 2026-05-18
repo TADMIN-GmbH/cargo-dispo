@@ -22,6 +22,7 @@ interface TeamManagerProps {
 export function TeamManager({ teamMembers, pendingInvites, currentUserId }: TeamManagerProps) {
   const supabase = createClient();
   const [invites, setInvites] = useState(pendingInvites);
+  const [members, setMembers] = useState(teamMembers);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<"employee" | "admin">("employee");
@@ -77,6 +78,17 @@ export function TeamManager({ teamMembers, pendingInvites, currentUserId }: Team
     setInvites((prev) => prev.filter((i) => i.id !== id));
   }
 
+  async function handleDeleteMember(id: string) {
+    if (!confirm("Benutzer wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")) return;
+    const res = await fetch(`/api/team/members/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setMembers((prev) => prev.filter((m) => m.id !== id));
+    } else {
+      const json = await res.json();
+      alert(json.error ?? "Fehler beim Löschen.");
+    }
+  }
+
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-6">
@@ -98,7 +110,7 @@ export function TeamManager({ teamMembers, pendingInvites, currentUserId }: Team
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Users className="w-5 h-5" />
-            Aktive Benutzer ({teamMembers.length})
+            Aktive Benutzer ({members.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -108,10 +120,11 @@ export function TeamManager({ teamMembers, pendingInvites, currentUserId }: Team
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Name</th>
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Rolle</th>
                 <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-6 py-3">Hinzugefügt</th>
+                <th className="px-6 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {teamMembers.map((m) => (
+              {members.map((m) => (
                 <tr key={m.id} className={m.id === currentUserId ? "bg-blue-50" : "hover:bg-gray-50"}>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -123,7 +136,7 @@ export function TeamManager({ teamMembers, pendingInvites, currentUserId }: Team
                         )}
                       </div>
                       <span className="font-medium text-gray-900">
-                        {m.full_name}
+                        {m.full_name ?? <span className="text-gray-400 italic">Noch kein Name</span>}
                         {m.id === currentUserId && (
                           <span className="text-xs text-blue-600 ml-2">(Du)</span>
                         )}
@@ -137,6 +150,18 @@ export function TeamManager({ teamMembers, pendingInvites, currentUserId }: Team
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     {formatDate(m.created_at)}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {m.id !== currentUserId && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={() => handleDeleteMember(m.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}
