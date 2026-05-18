@@ -17,7 +17,9 @@ import {
   startClarification,
 } from "@/lib/whatsapp-clarification";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+function makeOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+}
 
 function makeSupabase() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -116,6 +118,7 @@ async function isAdminSender(
 }
 
 export async function POST(request: NextRequest) {
+  const openai = makeOpenAI();
   const formData = await request.formData();
 
   const twilioSignature = request.headers.get("x-twilio-signature") ?? "";
