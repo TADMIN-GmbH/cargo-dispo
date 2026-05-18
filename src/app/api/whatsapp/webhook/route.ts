@@ -629,6 +629,7 @@ Regeln:
 - Antworte NUR mit dem JSON-Objekt, keine Erklärung`;
 
   let parsed: any = null;
+  let gptError: string | null = null;
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -640,15 +641,26 @@ Regeln:
     });
     parsed = JSON.parse(completion.choices[0].message.content ?? "{}");
   } catch (err) {
+    gptError = String(err);
     console.error("GPT parse error:", err);
+    // GPT failed — create empty parsed so keyword fallback can run
+    parsed = { action: "unknown", confidence: 0 };
   }
 
-  // If GPT returned "unknown" but the message looks like a tour command, try create_tour
-  if (parsed && parsed.action === "unknown") {
+  // Keyword fallback: if GPT returned "unknown" OR failed, try regex-based detection
+  if (!parsed || parsed.action === "unknown" || !parsed.action) {
     const looksLikeTour = /fährt|tour|fahrt|bei\s+\w+|für\s+\w+|nach\s+\w+/i.test(transcript);
     if (looksLikeTour) {
-      parsed.action = "create_tour";
-      parsed.confidence = 0.4;
+      parsed = {
+        ...parsed,
+        action: "create_tour",
+        confidence: 0.4,
+        // Try to extract driver name, license plate, customer from message
+        driver_name: transcript.match(/^([A-ZÄÖÜ][a-zäöü]+(?:\s+[A-ZÄÖÜ][a-zäöü]+)?)\s+fährt/)?.[1] ?? null,
+        license_plate: transcript.match(/auf\s+dem\s+([A-ZÄÖÜ]{1,3}[\s-][A-ZÄÖÜ]{1,2}[\s-]?\d{1,4}[A-ZÄÖÜ]?)/i)?.[1]?.trim() ?? null,
+        customer_name: transcript.match(/bei\s+([A-ZÄÖÜ][A-Za-zÄÖÜäöü\s&.]{1,30})(?:\s*$)/i)?.[1]?.trim() ?? null,
+        tour_date: /heute/i.test(transcript) ? today : /morgen/i.test(transcript) ? tomorrow : today,
+      };
     }
   }
 
@@ -760,7 +772,7 @@ Regeln:
     });
     await sendReply(
       from,
-      `📝 Transkription: "${transcript}"\n\n❓ Befehl nicht erkannt.\n\n🔍 Debug: action=${parsed?.action ?? "null"}, confidence=${parsed?.confidence ?? "null"}\n\nBeispiele:\n• "Kopp fährt morgen mit S.O TC 4444 für Ottensmann"\n• "Neues Fahrzeug HH-CK 010, Sprinter"\n• "Neuer Fahrer Max Müller, 0170 1234567"\n• "Neuer Kunde Spedition GmbH"`
+      `📝 Transkription: "${transcript}"\n\n❓ Befehl nicht erkannt.\n\n🔍 Debug: action=${parsed?.action ?? "null"}, confidence=${parsed?.confidence ?? "null"}${gptError ? `\n⚠️ GPT-Fehler: ${gptError.substring(0, 100)}` : ""}\n\nBeispiele:\n• "Kopp fährt morgen mit S.O TC 4444 für Ottensmann"\n• "Neues Fahrzeug HH-CK 010, Sprinter"\n• "Neuer Fahrer Max Müller, 0170 1234567"\n• "Neuer Kunde Spedition GmbH"`
     );
   }
 
