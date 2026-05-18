@@ -588,6 +588,7 @@ export async function handleClarification(
           }));
           const formatted = formatOptions(opts);
           const reply = pick(TEMPLATES.askDriver).replace("{options}", formatted);
+          await savePending(supabase, phone, pending.action, resolved, "driver", opts, pending.original_transcript);
           return { done: false, reply };
         }
       }
@@ -658,6 +659,7 @@ export async function handleClarification(
         } else if (matches.length > 1) {
           const opts = matches.map((c) => ({ label: c.company_name, ...c }));
           const formatted = formatOptions(opts);
+          await savePending(supabase, phone, pending.action, resolved, "customer", opts, pending.original_transcript);
           return {
             done: false,
             reply: pick(TEMPLATES.askCustomer).replace("{options}", formatted),
@@ -702,6 +704,7 @@ export async function handleClarification(
             ...v,
           }));
           const formatted = formatOptions(opts);
+          await savePending(supabase, phone, pending.action, resolved, "vehicle", opts, pending.original_transcript);
           return {
             done: false,
             reply: pick(TEMPLATES.askVehicle).replace("{options}", formatted),
