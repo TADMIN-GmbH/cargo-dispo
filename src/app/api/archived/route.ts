@@ -3,13 +3,16 @@ export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function makeSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // GET /api/archived?table=drivers|customers|vehicles
 export async function GET(req: NextRequest) {
+  const supabase = makeSupabase();
   const table = req.nextUrl.searchParams.get("table");
 
   if (table === "drivers") {
@@ -47,6 +50,7 @@ export async function GET(req: NextRequest) {
 
 // PATCH /api/archived — restore a record (set archived_at = null)
 export async function PATCH(req: NextRequest) {
+  const supabase = makeSupabase();
   const body = await req.json();
   const { table, id } = body as { table: string; id: string };
 
