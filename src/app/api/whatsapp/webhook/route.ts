@@ -577,13 +577,19 @@ Bekannte Kunden: ${customers?.map((c: any) => c.company_name).join(", ") || "noc
 
 Regeln:
 - "übernimm/kopiere Touren von gestern" → copy_yesterday_tours, confidence=0.95
-- "fährt morgen/heute/am [Datum] zu/für/nach" → create_tour
+- "fährt morgen/heute/am [Datum] zu/für/nach/bei/für" → create_tour
+- "[Name] fährt [heute/morgen/Datum] [mit Kennzeichen] bei/für/zu/nach [Kunde]" → create_tour, confidence=0.8
+- "[Name] fährt heute auf dem [Kennzeichen] bei [Kunde]" → create_tour, license_plate=[Kennzeichen], customer_name=[Kunde], confidence=0.85
 - "lege Kennzeichen ... an" / "neues Fahrzeug" → create_vehicle
 - "neuer Fahrer" / "lege Fahrer an" → create_driver
 - "neuer Kunde" / "lege Kunde an" → create_customer
-- Bei create_tour: confidence >= 0.5 wenn Fahrer ODER Kunde erkennbar
-- Kennzeichen-Format flexibel: "SO TC 4444" = "SO-TC 4444"
+- Bei create_tour: confidence >= 0.4 wenn irgendetwas erkennbar ist (Fahrer ODER Kunde ODER Datum)
+- Wenn nur ein Fahrername erkennbar ist aber kein Kunde → create_tour mit confidence=0.5
+- Kennzeichen-Format flexibel: "SO TC 4444" = "SO-TC 4444", "HAM CK 900" = Kennzeichen
+- "bei [Name/Abkürzung]" → customer_name=[Name/Abkürzung] (auch Abkürzungen wie "ALS", "OTT")
+- "auf dem [Kennzeichen]" → license_plate=[Kennzeichen]
 - Bei "Neuer Kunde [Firmenname]" → action=create_customer, new_company_name=[Firmenname], confidence=0.9
+- Im Zweifel lieber create_tour mit niedriger confidence als unknown
 - Antworte NUR mit dem JSON-Objekt, keine Erklärung`;
 
   let parsed: any = null;
@@ -601,7 +607,16 @@ Regeln:
     console.error("GPT parse error:", err);
   }
 
-  if (parsed && parsed.action !== "unknown" && (parsed.confidence ?? 0) >= 0.5) {
+  // If GPT returned "unknown" but the message looks like a tour command, try create_tour
+  if (parsed && parsed.action === "unknown") {
+    const looksLikeTour = /fährt|tour|fahrt|bei\s+\w+|für\s+\w+|nach\s+\w+/i.test(transcript);
+    if (looksLikeTour) {
+      parsed.action = "create_tour";
+      parsed.confidence = 0.4;
+    }
+  }
+
+  if (parsed && parsed.action !== "unknown" && (parsed.confidence ?? 0) >= 0.4) {
     // Route admin actions through clarification dialog
     const clarifiableActions = ["create_tour", "copy_tours", "create_driver", "create_vehicle"];
     if (clarifiableActions.includes(parsed.action)) {
