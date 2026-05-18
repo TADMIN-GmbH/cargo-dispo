@@ -34,37 +34,39 @@ export function TeamManager({ teamMembers, pendingInvites, currentUserId }: Team
     setError("");
     setSuccess("");
 
-    // Use Supabase Auth to invite user
-    const { error } = await supabase.auth.admin.inviteUserByEmail(inviteEmail, {
-      data: { role: inviteRole },
+    // Call server-side API route (requires service role key — cannot be called from client)
+    const res = await fetch("/api/team/invite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
     });
 
-    if (error) {
-      // Fallback: create invite record manually
-      const token = crypto.randomUUID();
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-      const { error: insertError } = await supabase.from("invites").insert({
-        email: inviteEmail,
-        invited_by: currentUserId,
-        role: inviteRole,
-        token,
-        accepted: false,
-        expires_at: expiresAt,
-      });
+    const json = await res.json();
 
-      if (insertError) {
-        setError("Fehler beim Einladen. Bitte versuche es erneut.");
-        setSending(false);
-        return;
-      }
-
-      setSuccess(`Einladung für ${inviteEmail} gespeichert. Du kannst den Einladungslink manuell senden.`);
-      const { data: newInvite } = await supabase.from("invites").select("*").eq("token", token).single();
-      if (newInvite) setInvites((prev) => [newInvite, ...prev]);
-    } else {
-      setSuccess(`Einladungs-E-Mail wurde an ${inviteEmail} gesendet.`);
+    if (!res.ok) {
+      setError(json.error ?? "Fehler beim Einladen. Bitte versuche es erneut.");
+      setSending(false);
+      return;
     }
 
+    // Also store in invites table so it shows as "pending" in the UI
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { error: insertError } = await supabase.from("invites").insert({
+      email: inviteEmail,
+      invited_by: currentUserId,
+      role: inviteRole,
+      token,
+      accepted: false,
+      expires_at: expiresAt,
+    });
+
+    if (!insertError) {
+      const { data: newInvite } = await supabase.from("invites").select("*").eq("token", token).single();
+      if (newInvite) setInvites((prev) => [newInvite, ...prev]);
+    }
+
+    setSuccess(`Einladungs-E-Mail wurde an ${inviteEmail} gesendet.`);
     setInviteEmail("");
     setSending(false);
     setTimeout(() => setDialogOpen(false), 2000);
