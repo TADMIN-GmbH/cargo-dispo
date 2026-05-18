@@ -533,17 +533,15 @@ export async function handleClarification(
       }
       if (chosen) {
         resolved.driver = chosen;
+        delete resolved._retry_driver;
         // Status warning — if bad status, ask for confirmation
         const warn = driverStatusWarning(chosen);
         if (warn) {
-          // Save with special confirm field and ask
           resolved._confirm_driver_status = false;
           warningAppend = warn;
-          // Treat as next pending field = confirm_driver_status (handled below)
           nextField = "_confirm_driver_status";
           break;
         }
-        // No vehicle warning (just a flag)
         if (!chosen.current_vehicle_id) {
           resolved.flags = [
             ...(resolved.flags ?? []),
@@ -552,11 +550,21 @@ export async function handleClarification(
         }
         nextField = nextPendingField(action, resolved);
       } else {
-        // Still not found — ask again
-        return {
-          done: false,
-          reply: pick(TEMPLATES.noSimilarFound).replace("{input}", trimmed),
-        };
+        const retries = (resolved._retry_driver ?? 0) + 1;
+        if (retries >= 2) {
+          // Accept free text after 2 failed attempts — note it and move on
+          resolved.driver = { id: null, first_name: trimmed, last_name: "", label: trimmed };
+          resolved.flags = [...(resolved.flags ?? []), `driver_not_in_db:${trimmed}`];
+          delete resolved._retry_driver;
+          nextField = nextPendingField(action, resolved);
+        } else {
+          resolved._retry_driver = retries;
+          await savePending(supabase, phone, pending.action, resolved, pending.pending_field, pending.options, pending.original_transcript);
+          return {
+            done: false,
+            reply: `❓ '${trimmed}' nicht gefunden. Nochmal versuchen oder einfach den Namen so schreiben wie er im Portal steht:`,
+          };
+        }
       }
       break;
     }
@@ -598,12 +606,23 @@ export async function handleClarification(
       }
       if (chosen) {
         resolved.customer = chosen;
+        delete resolved._retry_customer;
         nextField = nextPendingField(action, resolved);
       } else {
-        return {
-          done: false,
-          reply: pick(TEMPLATES.noSimilarFound).replace("{input}", trimmed),
-        };
+        const retries = (resolved._retry_customer ?? 0) + 1;
+        if (retries >= 2) {
+          resolved.customer = { id: null, company_name: trimmed, label: trimmed };
+          resolved.flags = [...(resolved.flags ?? []), `customer_not_in_db:${trimmed}`];
+          delete resolved._retry_customer;
+          nextField = nextPendingField(action, resolved);
+        } else {
+          resolved._retry_customer = retries;
+          await savePending(supabase, phone, pending.action, resolved, pending.pending_field, pending.options, pending.original_transcript);
+          return {
+            done: false,
+            reply: `❓ '${trimmed}' nicht gefunden. Nochmal versuchen oder Firmenname genau wie im Portal eingeben:`,
+          };
+        }
       }
       break;
     }
@@ -631,6 +650,7 @@ export async function handleClarification(
       }
       if (chosen) {
         resolved.vehicle = chosen;
+        delete resolved._retry_vehicle;
         const warn = vehicleStatusWarning(chosen);
         if (warn) {
           resolved._confirm_vehicle_status = false;
@@ -640,10 +660,21 @@ export async function handleClarification(
         }
         nextField = nextPendingField(action, resolved);
       } else {
-        return {
-          done: false,
-          reply: pick(TEMPLATES.noSimilarFound).replace("{input}", trimmed),
-        };
+        const retries = (resolved._retry_vehicle ?? 0) + 1;
+        if (retries >= 2) {
+          // Accept license plate as free text — no DB link but noted
+          resolved.vehicle = { id: null, license_plate: trimmed.toUpperCase(), type: "unbekannt", label: trimmed.toUpperCase() };
+          resolved.flags = [...(resolved.flags ?? []), `vehicle_not_in_db:${trimmed.toUpperCase()}`];
+          delete resolved._retry_vehicle;
+          nextField = nextPendingField(action, resolved);
+        } else {
+          resolved._retry_vehicle = retries;
+          await savePending(supabase, phone, pending.action, resolved, pending.pending_field, pending.options, pending.original_transcript);
+          return {
+            done: false,
+            reply: `❓ Kennzeichen '${trimmed.toUpperCase()}' nicht gefunden. Nochmal versuchen oder Kennzeichen genau wie im Portal eingeben:`,
+          };
+        }
       }
       break;
     }
