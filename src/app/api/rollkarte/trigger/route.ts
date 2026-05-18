@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { NextRequest } from "next/server";
 import { getRollkarteRequestMessage } from "@/lib/rollkarte-messages";
 import { createClient } from "@/lib/supabase/server";
