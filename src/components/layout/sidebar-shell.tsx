@@ -2,12 +2,16 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut, ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
+import { LogOut, ChevronLeft, ChevronRight, Pencil, type LucideIcon } from "lucide-react";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { PortalSwitcher } from "./portal-switcher";
 import { UserRole } from "@/lib/types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 
 export interface NavItem {
   href: string;
@@ -51,6 +55,31 @@ export function SidebarShell({
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [displayName, setDisplayName] = useState(userName);
+  const [nameInput, setNameInput] = useState(userName);
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState("");
+
+  async function handleSaveName(e: React.FormEvent) {
+    e.preventDefault();
+    setNameSaving(true);
+    setNameError("");
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ full_name: nameInput }),
+    });
+    if (res.ok) {
+      setDisplayName(nameInput);
+      setProfileOpen(false);
+      router.refresh();
+    } else {
+      const json = await res.json();
+      setNameError(json.error ?? "Fehler beim Speichern.");
+    }
+    setNameSaving(false);
+  }
 
   async function handleLogout() {
     const supabase = createClient();
@@ -140,12 +169,21 @@ export function SidebarShell({
       {/* User */}
       <div className="p-3 border-t border-gray-700">
         {!collapsed && (
-          <div className="px-3 py-2 mb-1">
-            <p className="text-sm font-medium text-white truncate">{userName}</p>
-            <p className="text-xs text-gray-400 truncate">{userEmail}</p>
-            <span className={cn("text-xs font-medium capitalize", roleClass)}>
-              {userRole === "admin" ? "Administrator" : "Mitarbeiter"}
-            </span>
+          <div className="px-3 py-2 mb-1 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white truncate">{displayName}</p>
+              <p className="text-xs text-gray-400 truncate">{userEmail}</p>
+              <span className={cn("text-xs font-medium capitalize", roleClass)}>
+                {userRole === "admin" ? "Administrator" : "Mitarbeiter"}
+              </span>
+            </div>
+            <button
+              onClick={() => { setNameInput(displayName); setProfileOpen(true); }}
+              className="text-gray-500 hover:text-gray-300 flex-shrink-0 mt-0.5"
+              title="Name bearbeiten"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
         <button
@@ -160,6 +198,40 @@ export function SidebarShell({
           {!collapsed && <span>Abmelden</span>}
         </button>
       </div>
+
+      {/* Profile dialog */}
+      <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Mein Profil</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSaveName} className="space-y-4 mt-2">
+            <div className="space-y-1.5">
+              <Label>Vollständiger Name</Label>
+              <Input
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                placeholder="Max Mustermann"
+                autoFocus
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>E-Mail</Label>
+              <Input value={userEmail} disabled className="text-gray-500" />
+            </div>
+            {nameError && (
+              <p className="text-sm text-red-600">{nameError}</p>
+            )}
+            <div className="flex gap-3 justify-end">
+              <Button type="button" variant="outline" onClick={() => setProfileOpen(false)}>Abbrechen</Button>
+              <Button type="submit" disabled={nameSaving}>
+                {nameSaving ? "Speichern..." : "Speichern"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </aside>
   );
 }
