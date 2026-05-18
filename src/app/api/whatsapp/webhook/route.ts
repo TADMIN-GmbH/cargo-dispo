@@ -760,7 +760,7 @@ Regeln:
     });
     await sendReply(
       from,
-      `📝 Transkription: "${transcript}"\n\n❓ Befehl nicht erkannt.\n\nBeispiele:\n• "Kopp fährt morgen mit S.O TC 4444 für Ottensmann"\n• "Neues Fahrzeug HH-CK 010, Sprinter"\n• "Neuer Fahrer Max Müller, 0170 1234567"\n• "Neuer Kunde Spedition GmbH"`
+      `📝 Transkription: "${transcript}"\n\n❓ Befehl nicht erkannt.\n\n🔍 Debug: action=${parsed?.action ?? "null"}, confidence=${parsed?.confidence ?? "null"}\n\nBeispiele:\n• "Kopp fährt morgen mit S.O TC 4444 für Ottensmann"\n• "Neues Fahrzeug HH-CK 010, Sprinter"\n• "Neuer Fahrer Max Müller, 0170 1234567"\n• "Neuer Kunde Spedition GmbH"`
     );
   }
 
