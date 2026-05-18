@@ -7,6 +7,13 @@ import {
   getRollkarteConfirmedMessage,
   getRollkarteThankYouMessage,
 } from "@/lib/rollkarte-messages";
+import {
+  getPending,
+  savePending,
+  clearPending,
+  handleClarification,
+  startClarification,
+} from "@/lib/whatsapp-clarification";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
@@ -372,6 +379,36 @@ export async function POST(request: NextRequest) {
   }
 
   // =========================================================
+  // STEP 2b: Check for in-progress clarification dialog (expires after 30 min)
+  // =========================================================
+  const pendingCmd = await getPending(supabase, senderPhone);
+  if (pendingCmd && new Date(pendingCmd.expires_at) > new Date()) {
+    let clarResult: Awaited<ReturnType<typeof handleClarification>>;
+    try {
+      clarResult = await handleClarification(supabase, senderPhone, transcript, pendingCmd);
+    } catch (err) {
+      console.error("Clarification error:", err);
+      await clearPending(supabase, senderPhone);
+      await sendReply(
+        from,
+        "❌ Beim Klärungsdialog ist ein Fehler aufgetreten. Bitte starte deinen Befehl erneut."
+      );
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+    }
+
+    if (!clarResult.done) {
+      // Already saved inside handleClarification — just send the reply
+      await sendReply(from, clarResult.reply);
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+    }
+
+    // All fields resolved — execute the command
+    await clearPending(supabase, senderPhone);
+    await executeResolvedCommand(supabase, clarResult.action, clarResult.resolved, from, transcript);
+    return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+  }
+
+  // =========================================================
   // STEP 3: Copy-tours command (regex-first, reliable)
   // =========================================================
   const copyMatch = /(?:übernimm?|kopier|nehm?)\s+(?:(?:alle|die|meine|seine|ihre)\s+)?touren?\s+/i.test(
@@ -564,72 +601,40 @@ Regeln:
     console.error("GPT parse error:", err);
   }
 
-  let replyMessage = `📝 Transkription: "${transcript}"\n\n`;
-  let success = false;
-
   if (parsed && parsed.action !== "unknown" && (parsed.confidence ?? 0) >= 0.5) {
-    const findDriver = (name: string) =>
-      drivers?.find(
-        (d: any) =>
-          `${d.first_name} ${d.last_name}`.toLowerCase().includes(name.toLowerCase()) ||
-          d.last_name.toLowerCase().includes(name.toLowerCase()) ||
-          d.first_name.toLowerCase().includes(name.toLowerCase())
-      );
-    const findVehicle = (plate: string) =>
-      vehicles?.find(
-        (v: any) =>
-          v.license_plate.toLowerCase().replace(/[\s-]/g, "") ===
-          plate.toLowerCase().replace(/[\s-]/g, "")
-      );
-    const findCustomer = (name: string) =>
-      customers?.find(
-        (c: any) =>
-          c.company_name.toLowerCase().includes(name.toLowerCase()) ||
-          name.toLowerCase().includes(c.company_name.toLowerCase().split(" ")[0])
-      );
-
-    if (parsed.action === "create_tour") {
-      const d = parsed.driver_name ? findDriver(parsed.driver_name) : null;
-      const v = parsed.license_plate ? findVehicle(parsed.license_plate) : null;
-      const c = parsed.customer_name ? findCustomer(parsed.customer_name) : null;
-
-      const tourPayload: any = {
-        tour_date: parsed.tour_date ?? today,
-        status: "planned",
-        rollkarte_status: "pending",
-        notes: parsed.notes
-          ? `${parsed.notes} | WhatsApp: ${transcript}`
-          : `WhatsApp: ${transcript}`,
-      };
-      if (d) tourPayload.driver_id = d.id;
-      if (v) tourPayload.vehicle_id = v.id;
-      if (c) tourPayload.customer_id = c.id;
-
-      const { error } = await supabase.from("tours").insert(tourPayload);
-      if (!error) {
-        success = true;
-        replyMessage += `✅ Tour angelegt für ${parsed.tour_date ?? "heute"}:\n`;
-        replyMessage += d
-          ? `👤 Fahrer: ${d.first_name} ${d.last_name}\n`
-          : parsed.driver_name
-          ? `⚠️ Fahrer "${parsed.driver_name}" nicht in DB — bitte manuell zuweisen\n`
-          : "";
-        replyMessage += v
-          ? `🚛 Fahrzeug: ${v.license_plate}\n`
-          : parsed.vehicle_type
-          ? `🚛 Fahrzeugtyp: ${parsed.vehicle_type} (nicht in DB)\n`
-          : parsed.license_plate
-          ? `⚠️ Kennzeichen "${parsed.license_plate}" nicht gefunden\n`
-          : "";
-        replyMessage += c
-          ? `🏢 Kunde: ${c.company_name}\n`
-          : parsed.customer_name
-          ? `⚠️ Kunde "${parsed.customer_name}" nicht in DB — bitte manuell zuweisen\n`
-          : "";
-      } else {
-        replyMessage += `❌ Fehler beim Anlegen der Tour: ${error.message}`;
+    // Route admin actions through clarification dialog
+    const clarifiableActions = ["create_tour", "copy_tours", "create_driver", "create_vehicle"];
+    if (clarifiableActions.includes(parsed.action)) {
+      let clarResult: Awaited<ReturnType<typeof startClarification>>;
+      try {
+        clarResult = await startClarification(supabase, senderPhone, parsed, transcript);
+      } catch (err) {
+        console.error("startClarification error:", err);
+        clarResult = null;
       }
-    } else if (parsed.action === "copy_yesterday_tours") {
+
+      if (clarResult && !clarResult.done) {
+        await supabase.from("whatsapp_logs").insert({
+          sender_number: from,
+          transcript,
+          parsed_action: { ...parsed, clarification: "started" },
+          success: false,
+        });
+        await sendReply(from, clarResult.reply);
+        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+      }
+
+      // All resolved immediately (perfect match on first try)
+      const resolvedData = clarResult?.resolved ?? {};
+      await executeResolvedCommand(supabase, parsed.action, resolvedData, from, transcript);
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+    }
+
+    // Non-clarifiable actions (copy_yesterday_tours, create_customer) — execute directly
+    let replyMessage = `📝 Transkription: "${transcript}"\n\n`;
+    let success = false;
+
+    if (parsed.action === "copy_yesterday_tours") {
       const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
       const { data: yesterdayTours } = await supabase
         .from("tours")
@@ -640,7 +645,7 @@ Regeln:
       if (!yesterdayTours || yesterdayTours.length === 0) {
         replyMessage += `⚠️ Keine Touren von gestern (${yesterday}) gefunden.`;
       } else {
-        const newTours = yesterdayTours.map((t) => ({
+        const newTours = yesterdayTours.map((t: any) => ({
           ...t,
           tour_date: today,
           status: "planned",
@@ -653,43 +658,6 @@ Regeln:
           replyMessage += `✅ ${newTours.length} Tour${newTours.length > 1 ? "en" : ""} von gestern (${yesterday}) für heute übernommen.`;
         } else {
           replyMessage += `❌ Fehler beim Kopieren der Touren: ${error.message}`;
-        }
-      }
-    } else if (parsed.action === "create_vehicle") {
-      const plate = parsed.new_license_plate || parsed.license_plate;
-      const type = parsed.new_vehicle_type || parsed.vehicle_type || "Unbekannt";
-      if (!plate) {
-        replyMessage += `❌ Kennzeichen nicht erkannt. Beispiel: "Lege Kennzeichen HH-CK 010 als LKW an"`;
-      } else {
-        const { error } = await supabase.from("vehicles").insert({
-          license_plate: plate.toUpperCase(),
-          type,
-          status: "available",
-        });
-        if (!error) {
-          success = true;
-          replyMessage += `✅ Fahrzeug angelegt:\n🚛 Kennzeichen: ${plate.toUpperCase()}\n📋 Typ: ${type}`;
-        } else {
-          replyMessage += `❌ Fehler: ${error.message}`;
-        }
-      }
-    } else if (parsed.action === "create_driver") {
-      const firstName = parsed.new_first_name;
-      const lastName = parsed.new_last_name;
-      if (!firstName || !lastName) {
-        replyMessage += `❌ Vor- und Nachname nicht erkannt. Beispiel: "Neuer Fahrer Max Mustermann, Telefon 0170 1234567"`;
-      } else {
-        const { error } = await supabase.from("drivers").insert({
-          first_name: firstName,
-          last_name: lastName,
-          phone: parsed.new_phone || null,
-          status: "available",
-        });
-        if (!error) {
-          success = true;
-          replyMessage += `✅ Fahrer angelegt:\n👤 ${firstName} ${lastName}${parsed.new_phone ? `\n📞 ${parsed.new_phone}` : ""}`;
-        } else {
-          replyMessage += `❌ Fehler: ${error.message}`;
         }
       }
     } else if (parsed.action === "create_customer") {
@@ -709,19 +677,158 @@ Regeln:
         }
       }
     }
+
+    await supabase.from("whatsapp_logs").insert({
+      sender_number: from,
+      transcript,
+      parsed_action: parsed,
+      success,
+    });
+    await sendReply(from, replyMessage);
   } else {
-    replyMessage += `❓ Befehl nicht erkannt.\n\nBeispiele:\n• "Kopp fährt morgen mit S.O TC 4444 für Ottensmann"\n• "Neues Fahrzeug HH-CK 010, Sprinter"\n• "Neuer Fahrer Max Müller, 0170 1234567"\n• "Neuer Kunde Spedition GmbH"`;
+    await supabase.from("whatsapp_logs").insert({
+      sender_number: from,
+      transcript,
+      parsed_action: parsed,
+      success: false,
+    });
+    await sendReply(
+      from,
+      `📝 Transkription: "${transcript}"\n\n❓ Befehl nicht erkannt.\n\nBeispiele:\n• "Kopp fährt morgen mit S.O TC 4444 für Ottensmann"\n• "Neues Fahrzeug HH-CK 010, Sprinter"\n• "Neuer Fahrer Max Müller, 0170 1234567"\n• "Neuer Kunde Spedition GmbH"`
+    );
+  }
+
+  return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+}
+
+// ---------------------------------------------------------------------------
+// executeResolvedCommand — runs the actual DB operation after all fields resolved
+// ---------------------------------------------------------------------------
+async function executeResolvedCommand(
+  supabase: ReturnType<typeof makeSupabase>,
+  action: string,
+  resolved: Record<string, any>,
+  from: string,
+  transcript: string
+) {
+  const today = new Date().toISOString().split("T")[0];
+  let replyMessage = "";
+  let success = false;
+
+  if (action === "create_tour") {
+    const tourPayload: any = {
+      tour_date: resolved.tour_date ?? today,
+      status: "planned",
+      rollkarte_status: "pending",
+      notes: resolved.notes
+        ? `${resolved.notes} | WhatsApp: ${transcript}`
+        : `WhatsApp: ${transcript}`,
+    };
+    if (resolved.driver?.id) tourPayload.driver_id = resolved.driver.id;
+    if (resolved.vehicle?.id) tourPayload.vehicle_id = resolved.vehicle.id;
+    if (resolved.customer?.id) tourPayload.customer_id = resolved.customer.id;
+
+    const { error } = await supabase.from("tours").insert(tourPayload);
+    if (!error) {
+      success = true;
+      replyMessage = `✅ Tour angelegt für ${resolved.tour_date ?? "heute"}:\n`;
+      if (resolved.driver) {
+        replyMessage += `👤 Fahrer: ${resolved.driver.first_name} ${resolved.driver.last_name}\n`;
+      }
+      if (resolved.vehicle) {
+        replyMessage += `🚛 Fahrzeug: ${resolved.vehicle.license_plate}\n`;
+      }
+      if (resolved.customer) {
+        replyMessage += `🏢 Kunde: ${resolved.customer.company_name}\n`;
+      }
+      if (resolved.flags?.length) {
+        replyMessage += `\n⚠️ Hinweise:\n${resolved.flags.map((f: string) => `• ${f}`).join("\n")}`;
+      }
+      replyMessage += "\nBitte im Portal prüfen.";
+    } else {
+      replyMessage = `❌ Fehler beim Anlegen der Tour: ${error.message}`;
+    }
+  } else if (action === "copy_tours") {
+    const sourceDate = resolved.source_date;
+    const targetDate = resolved.target_date;
+    const [sy, sm, sd] = sourceDate.split("-");
+    const [ty, tm, td] = targetDate.split("-");
+
+    const { data: sourceTours, error: fetchErr } = await supabase
+      .from("tours")
+      .select("driver_id, vehicle_id, customer_id, pickup_address, delivery_address, notes")
+      .eq("tour_date", sourceDate)
+      .neq("status", "cancelled");
+
+    if (fetchErr) {
+      replyMessage = `❌ Datenbankfehler: ${fetchErr.message}`;
+    } else if (!sourceTours || sourceTours.length === 0) {
+      replyMessage = `⚠️ Keine Touren für ${sd}.${sm}.${sy} gefunden — vielleicht war das ein freier Tag?`;
+    } else {
+      const newTours = sourceTours.map((t: any) => ({
+        ...t,
+        tour_date: targetDate,
+        status: "planned",
+        rollkarte_status: "pending",
+        notes: t.notes ? `${t.notes} | Kopie von ${sourceDate}` : `Kopie von ${sourceDate}`,
+      }));
+      const { error: insertErr } = await supabase.from("tours").insert(newTours);
+      if (!insertErr) {
+        success = true;
+        replyMessage = `✅ ${newTours.length} Tour${newTours.length !== 1 ? "en" : ""} vom ${sd}.${sm}.${sy} für ${td}.${tm}.${ty} übernommen.\n\nBitte im Portal unter Touren prüfen.`;
+      } else {
+        replyMessage = `❌ Fehler beim Kopieren der Touren: ${insertErr.message}`;
+      }
+    }
+  } else if (action === "create_driver") {
+    const firstName = resolved.new_first_name;
+    const lastName = resolved.new_last_name;
+    if (!firstName || !lastName) {
+      replyMessage = `❌ Vor- und Nachname fehlen. Bitte starte den Befehl erneut.`;
+    } else {
+      const { error } = await supabase.from("drivers").insert({
+        first_name: firstName,
+        last_name: lastName,
+        phone: resolved.new_phone || null,
+        status: "available",
+      });
+      if (!error) {
+        success = true;
+        replyMessage = `✅ Fahrer angelegt:\n👤 ${firstName} ${lastName}${resolved.new_phone ? `\n📞 ${resolved.new_phone}` : ""}`;
+      } else {
+        replyMessage = `❌ Fehler: ${error.message}`;
+      }
+    }
+  } else if (action === "create_vehicle") {
+    const plate = resolved.new_license_plate;
+    const type = resolved.new_vehicle_type ?? "Unbekannt";
+    if (!plate) {
+      replyMessage = `❌ Kennzeichen fehlt. Bitte starte den Befehl erneut.`;
+    } else {
+      const { error } = await supabase.from("vehicles").insert({
+        license_plate: plate.toUpperCase(),
+        type,
+        status: "available",
+      });
+      if (!error) {
+        success = true;
+        replyMessage = `✅ Fahrzeug angelegt:\n🚛 Kennzeichen: ${plate.toUpperCase()}\n📋 Typ: ${type}`;
+      } else {
+        replyMessage = `❌ Fehler: ${error.message}`;
+      }
+    }
+  } else {
+    replyMessage = `❌ Unbekannte Aktion: ${action}`;
   }
 
   await supabase.from("whatsapp_logs").insert({
     sender_number: from,
     transcript,
-    parsed_action: parsed,
+    parsed_action: { action, resolved },
     success,
   });
 
   await sendReply(from, replyMessage);
-  return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
 }
 
 async function sendReply(to: string, message: string) {

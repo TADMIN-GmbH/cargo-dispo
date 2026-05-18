@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { ActionRecommendations } from "@/components/dashboard/action-recommendations";
+import { TodoWidget } from "@/components/dashboard/todo-widget";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -22,6 +23,8 @@ export default async function DashboardPage() {
     { data: availableVehicles },
     { data: onTourDrivers },
     { data: toursForRecommendations },
+    { data: todoDrivers },
+    { data: todoVehicles },
   ] = await Promise.all([
     supabase.from("vehicles").select("*", { count: "exact", head: true }),
     supabase.from("drivers").select("*", { count: "exact", head: true }),
@@ -40,6 +43,13 @@ export default async function DashboardPage() {
       )
       .gte("tour_date", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0])
       .neq("status", "cancelled"),
+    adminSupabase
+      .from("drivers")
+      .select("id, first_name, last_name, phone, current_vehicle_id, status")
+      .neq("status", "off"),
+    adminSupabase
+      .from("vehicles")
+      .select("id, license_plate, type, status, current_driver_id"),
   ]);
 
   const todayFormatted = new Date(selectedDate + "T00:00:00").toLocaleDateString("de-DE", {
@@ -226,6 +236,16 @@ export default async function DashboardPage() {
         <ActionRecommendations
           tours={(toursForRecommendations ?? []) as any}
           onTourDate={today}
+        />
+      </div>
+
+      {/* Offene Aufgaben (Fahrer / Fahrzeuge) */}
+      <div className="mt-6">
+        <TodoWidget
+          data={{
+            drivers: (todoDrivers ?? []) as any,
+            vehicles: (todoVehicles ?? []) as any,
+          }}
         />
       </div>
     </div>
