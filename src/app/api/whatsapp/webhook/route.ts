@@ -186,186 +186,199 @@ export async function POST(request: NextRequest) {
     return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
   }
 
-  // =========================================================
-  // STEP 1: Check if sender is a known driver with a tour today
-  // =========================================================
   const senderPhone = from.replace(/^whatsapp:/, "");
-  const { e164: senderE164, local: senderLocal, all: senderAll } = phoneVariants(senderPhone);
+  const { all: senderAll } = phoneVariants(senderPhone);
   const today = new Date().toISOString().split("T")[0];
 
-  const { data: driver } = await supabase
-    .from("drivers")
-    .select("id, first_name, last_name")
-    .or(senderAll.map((v) => `phone.eq.${v}`).join(","))
-    .maybeSingle();
-
-  if (driver) {
-    // ── Join-Code erkennen (Twilio Sandbox: "join <keyword>") ────────────
-    if (/^join\s+\S+/i.test(bodyText.trim())) {
-      await supabase
-        .from("drivers")
-        .update({ whatsapp_joined_at: new Date().toISOString() })
-        .eq("id", driver.id);
-      await sendReply(
-        from,
-        `✅ Hallo ${driver.first_name}! Du bist jetzt mit WhatsApp verbunden und erhältst täglich deine Rollkarten-Anfrage.`
-      );
-      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
-    }
-
-    // Compute affirmative/negative at driver level so they're available
-    // in ALL branches below — including the outer fallback after driverTours check.
-    // NOTE: emoji above U+FFFF need the `u` flag — separate regex for safety.
-    // "ok" intentionally excluded: WhatsApp auto-replies send "OK" automatically
-    // after every incoming message, which would falsely confirm rollkarte numbers.
-    const trimmedMsg = transcript.trim();
-    const isAffirmative =
-      /^(ja\b|yes\b|richtig|korrekt|stimmt|genau|jo\b|yep|jep|passt|super|alles\s*klar)/i.test(trimmedMsg) ||
-      /^[\u{1F44D}\u{2705}\u{2713}\u{1F64C}\u{1F44C}]/u.test(trimmedMsg); // 👍 ✅ ✓ 🙌 👌
-    const isNegative = /^(nein\b|no\b|falsch|nö\b|nicht\b|wrong)/i.test(trimmedMsg);
-
-    const { data: driverTours } = await supabase
-      .from("tours")
-      .select(
-        `id, rollkarte_status, customer:customers(company_name, rollkarte_prefix, rollkarte_accepts_text)`
-      )
-      .eq("tour_date", today)
-      .eq("driver_id", driver.id)
-      .in("rollkarte_status", ["pending", "requested", "confirming"]);
-
-    if (driverTours && driverTours.length > 0) {
-      // --- Handle confirmation flow ---
-      const confirmingTour = driverTours.find((t: any) => t.rollkarte_status === "confirming");
-      if (confirmingTour) {
-        const isYes = isAffirmative;
-        const isNo  = isNegative;
-
-        if (isYes) {
-          await supabase
-            .from("tours")
-            .update({
-              rollkarte_status: "received",
-              rollkarte_answered_at: new Date().toISOString(),
-            })
-            .eq("id", (confirmingTour as any).id);
-          await sendReply(from, getRollkarteConfirmedMessage(driver.first_name));
-        } else if (isNo) {
-          await supabase
-            .from("tours")
-            .update({ rollkarte_status: "requested", rollkarte_number: null })
-            .eq("id", (confirmingTour as any).id);
-          await sendReply(
-            from,
-            `Kein Problem, ${driver.first_name}! Schick mir einfach die richtige Nummer.`
-          );
-        } else {
-          // Treat as a new number attempt for the confirming tour
-          const customer = (confirmingTour as any).customer;
-          const extracted = extractRollkarte(
-            transcript,
-            customer?.rollkarte_prefix,
-            customer?.rollkarte_accepts_text
-          );
-          if (extracted) {
-            await supabase
-              .from("tours")
-              .update({
-                rollkarte_number: extracted,
-                rollkarte_source: "whatsapp",
-                rollkarte_updated_by: `${driver.first_name} ${driver.last_name}`,
-              })
-              .eq("id", (confirmingTour as any).id);
-            await sendReply(from, getRollkarteConfirmationMessage(driver.first_name, extracted));
-          } else {
-            await sendReply(
-              from,
-              `Ich konnte keine Nummer erkennen, ${driver.first_name}. Antworte mit *JA* um die bisherige Nummer zu bestätigen, oder schick einfach die richtige Nummer.`
-            );
-          }
-        }
-        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
-      }
-
-      // --- Extract rollkarte from natural-language reply ---
-      // Pick the first tour (handle multiple tours below)
-      const activeTours = driverTours.filter((t: any) => t.rollkarte_status !== "confirming");
-      const tour = activeTours[0] as any;
-      const customer = tour.customer;
-      const extracted = extractRollkarte(
-        transcript,
-        customer?.rollkarte_prefix,
-        customer?.rollkarte_accepts_text
-      );
-
-      if (extracted) {
-        const updatePayload: Record<string, unknown> = {
-          rollkarte_number: extracted,
-          rollkarte_status: activeTours.length === 1 ? "confirming" : "received",
-          rollkarte_source: "whatsapp",
-          rollkarte_updated_by: `${driver.first_name} ${driver.last_name}`,
-        };
-
-        if (activeTours.length === 1) {
-          // Single tour → ask for confirmation
-          await supabase.from("tours").update(updatePayload).eq("id", tour.id);
-          await sendReply(from, getRollkarteConfirmationMessage(driver.first_name, extracted));
-        } else {
-          // Multiple tours → save on all without individual confirmation, notify
-          for (const t of activeTours) {
-            await supabase
-              .from("tours")
-              .update({
-                rollkarte_number: extracted,
-                rollkarte_status: "received",
-                rollkarte_answered_at: new Date().toISOString(),
-                rollkarte_source: "whatsapp",
-                rollkarte_updated_by: `${driver.first_name} ${driver.last_name} (mehrdeutig)`,
-              })
-              .eq("id", (t as any).id);
-          }
-          await sendReply(
-            from,
-            `${getRollkarteThankYouMessage(driver.first_name, extracted)}\n\n⚠️ Du hast heute ${activeTours.length} Touren — Nummer ${extracted} wurde bei allen eingetragen. Bitte im Portal prüfen.`
-          );
-        }
-      } else {
-        await sendReply(
-          from,
-          `Ich konnte keine Rollkartennummer in deiner Nachricht finden, ${driver.first_name}.\n\nBitte schick die Nummer direkt, z.B.:\n*26-8365401*`
-        );
-      }
-      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
-    }
-
-    // Driver found but NO pending/requested/confirming tours.
-    // Could be: tour already confirmed (e.g. by an auto-reply "OK"), or driver
-    // is replying after we already processed the confirmation on a retry.
-    // Check whether an affirmative arrived for a recently-received tour.
-    if (isAffirmative) {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      const { data: recentlyReceived } = await supabase
-        .from("tours")
-        .select("id")
-        .eq("tour_date", today)
-        .eq("driver_id", driver.id)
-        .eq("rollkarte_status", "received")
-        .eq("rollkarte_source", "whatsapp")
-        .gte("rollkarte_answered_at", fiveMinutesAgo)
-        .maybeSingle();
-      if (recentlyReceived) {
-        await sendReply(from, getRollkarteConfirmedMessage(driver.first_name));
-        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
-      }
-    }
-    // Fall through to admin check (driver may also have admin role)
-  }
-
   // =========================================================
-  // STEP 2: Check if sender is an authorized admin
+  // STEP 1: Check admin status FIRST.
+  // Admins bypass driver rollkarte flow — they issue dispatch commands.
   // =========================================================
   const senderIsAdmin = await isAdminSender(supabase, senderPhone);
+
   if (!senderIsAdmin) {
-    // Unknown or non-admin number → polite rejection
+    // =========================================================
+    // STEP 1b: Non-admin → check if sender is a known driver with a tour today
+    // =========================================================
+    const { data: driver } = await supabase
+      .from("drivers")
+      .select("id, first_name, last_name")
+      .or(senderAll.map((v) => `phone.eq.${v}`).join(","))
+      .maybeSingle();
+
+    if (driver) {
+      // ── Join-Code erkennen (Twilio Sandbox: "join <keyword>") ────────────
+      if (/^join\s+\S+/i.test(bodyText.trim())) {
+        await supabase
+          .from("drivers")
+          .update({ whatsapp_joined_at: new Date().toISOString() })
+          .eq("id", driver.id);
+        await sendReply(
+          from,
+          `✅ Hallo ${driver.first_name}! Du bist jetzt mit WhatsApp verbunden und erhältst täglich deine Rollkarten-Anfrage.`
+        );
+        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+      }
+
+      // NOTE: emoji above U+FFFF need the `u` flag — separate regex for safety.
+      // "ok" intentionally excluded: WhatsApp auto-replies send "OK" automatically
+      // after every incoming message, which would falsely confirm rollkarte numbers.
+      const trimmedMsg = transcript.trim();
+      const isAffirmative =
+        /^(ja\b|yes\b|richtig|korrekt|stimmt|genau|jo\b|yep|jep|passt|super|alles\s*klar)/i.test(trimmedMsg) ||
+        /^[\u{1F44D}\u{2705}\u{2713}\u{1F64C}\u{1F44C}]/u.test(trimmedMsg); // 👍 ✅ ✓ 🙌 👌
+      const isNegative = /^(nein\b|no\b|falsch|nö\b|nicht\b|wrong)/i.test(trimmedMsg);
+
+      const { data: driverTours } = await supabase
+        .from("tours")
+        .select(
+          `id, rollkarte_status, customer:customers(company_name, rollkarte_prefix, rollkarte_accepts_text)`
+        )
+        .eq("tour_date", today)
+        .eq("driver_id", driver.id)
+        .in("rollkarte_status", ["pending", "requested", "confirming"]);
+
+      if (driverTours && driverTours.length > 0) {
+        // --- Handle confirmation flow ---
+        const confirmingTour = driverTours.find((t: any) => t.rollkarte_status === "confirming");
+        if (confirmingTour) {
+          const isYes = isAffirmative;
+          const isNo  = isNegative;
+
+          if (isYes) {
+            await supabase
+              .from("tours")
+              .update({
+                rollkarte_status: "received",
+                rollkarte_answered_at: new Date().toISOString(),
+              })
+              .eq("id", (confirmingTour as any).id);
+            await sendReply(from, getRollkarteConfirmedMessage(driver.first_name));
+          } else if (isNo) {
+            await supabase
+              .from("tours")
+              .update({ rollkarte_status: "requested", rollkarte_number: null })
+              .eq("id", (confirmingTour as any).id);
+            await sendReply(
+              from,
+              `Kein Problem, ${driver.first_name}! Schick mir einfach die richtige Nummer.`
+            );
+          } else {
+            // Treat as a new number attempt for the confirming tour
+            const customer = (confirmingTour as any).customer;
+            const extracted = extractRollkarte(
+              transcript,
+              customer?.rollkarte_prefix,
+              customer?.rollkarte_accepts_text
+            );
+            if (extracted) {
+              await supabase
+                .from("tours")
+                .update({
+                  rollkarte_number: extracted,
+                  rollkarte_source: "whatsapp",
+                  rollkarte_updated_by: `${driver.first_name} ${driver.last_name}`,
+                })
+                .eq("id", (confirmingTour as any).id);
+              await sendReply(from, getRollkarteConfirmationMessage(driver.first_name, extracted));
+            } else {
+              await sendReply(
+                from,
+                `Ich konnte keine Nummer erkennen, ${driver.first_name}. Antworte mit *JA* um die bisherige Nummer zu bestätigen, oder schick einfach die richtige Nummer.`
+              );
+            }
+          }
+          return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+        }
+
+        // --- Extract rollkarte from natural-language reply ---
+        const activeTours = driverTours.filter((t: any) => t.rollkarte_status !== "confirming");
+        const tour = activeTours[0] as any;
+        const customer = tour.customer;
+        const extracted = extractRollkarte(
+          transcript,
+          customer?.rollkarte_prefix,
+          customer?.rollkarte_accepts_text
+        );
+
+        if (extracted) {
+          const updatePayload: Record<string, unknown> = {
+            rollkarte_number: extracted,
+            rollkarte_status: activeTours.length === 1 ? "confirming" : "received",
+            rollkarte_source: "whatsapp",
+            rollkarte_updated_by: `${driver.first_name} ${driver.last_name}`,
+          };
+
+          if (activeTours.length === 1) {
+            await supabase.from("tours").update(updatePayload).eq("id", tour.id);
+            await sendReply(from, getRollkarteConfirmationMessage(driver.first_name, extracted));
+          } else {
+            for (const t of activeTours) {
+              await supabase
+                .from("tours")
+                .update({
+                  rollkarte_number: extracted,
+                  rollkarte_status: "received",
+                  rollkarte_answered_at: new Date().toISOString(),
+                  rollkarte_source: "whatsapp",
+                  rollkarte_updated_by: `${driver.first_name} ${driver.last_name} (mehrdeutig)`,
+                })
+                .eq("id", (t as any).id);
+            }
+            await sendReply(
+              from,
+              `${getRollkarteThankYouMessage(driver.first_name, extracted)}\n\n⚠️ Du hast heute ${activeTours.length} Touren — Nummer ${extracted} wurde bei allen eingetragen. Bitte im Portal prüfen.`
+            );
+          }
+        } else {
+          await sendReply(
+            from,
+            `Ich konnte keine Rollkartennummer in deiner Nachricht finden, ${driver.first_name}.\n\nBitte schick die Nummer direkt, z.B.:\n*26-8365401*`
+          );
+        }
+        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+      }
+
+      // Driver found but NO pending/requested/confirming tours.
+      if (isAffirmative) {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const { data: recentlyReceived } = await supabase
+          .from("tours")
+          .select("id")
+          .eq("tour_date", today)
+          .eq("driver_id", driver.id)
+          .eq("rollkarte_status", "received")
+          .eq("rollkarte_source", "whatsapp")
+          .gte("rollkarte_answered_at", fiveMinutesAgo)
+          .maybeSingle();
+        if (recentlyReceived) {
+          await sendReply(from, getRollkarteConfirmedMessage(driver.first_name));
+          return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+        }
+      }
+
+      // Check for join-code even if no tours (late join)
+      if (/^join\s+\S+/i.test(bodyText.trim())) {
+        await supabase
+          .from("drivers")
+          .update({ whatsapp_joined_at: new Date().toISOString() })
+          .eq("id", driver.id);
+        await sendReply(
+          from,
+          `✅ Hallo ${driver.first_name}! Du bist jetzt mit WhatsApp verbunden.`
+        );
+        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+      }
+
+      // Driver with no active tours
+      await sendReply(
+        from,
+        `Hallo ${driver.first_name}! 👋\n\nDu hast heute keine offenen Rollkarten-Anfragen.`
+      );
+      return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+    }
+
+    // Unknown number — not a driver, not an admin
     await sendReply(
       from,
       `Hallo! 👋\n\nDiese Nummer ist nicht als Administrator registriert und kann keine Befehle erteilen.\n\nFalls du ein Fahrer bist, antworte bitte nur auf die Rollkarten-Anfrage von uns.\n\nBei Fragen melde dich im Portal.`
@@ -381,7 +394,28 @@ export async function POST(request: NextRequest) {
   }
 
   // =========================================================
-  // STEP 2b: Check for in-progress clarification dialog (expires after 30 min)
+  // STEP 2: Sender IS an admin — check for join-code first
+  // (admin might also be a driver for WA sandbox purposes)
+  // =========================================================
+  if (/^join\s+\S+/i.test(bodyText.trim())) {
+    // Mark the admin's own driver record as joined (if they have one)
+    const { data: adminDriver } = await supabase
+      .from("drivers")
+      .select("id, first_name")
+      .or(senderAll.map((v) => `phone.eq.${v}`).join(","))
+      .maybeSingle();
+    if (adminDriver) {
+      await supabase
+        .from("drivers")
+        .update({ whatsapp_joined_at: new Date().toISOString() })
+        .eq("id", adminDriver.id);
+    }
+    await sendReply(from, `✅ WhatsApp-Verbindung bestätigt. Du bist jetzt als Admin eingeloggt.`);
+    return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
+  }
+
+  // =========================================================
+  // STEP 3: Check for in-progress clarification dialog (expires after 30 min)
   // =========================================================
   const pendingCmd = await getPending(supabase, senderPhone);
   if (pendingCmd && new Date(pendingCmd.expires_at) > new Date()) {
@@ -627,7 +661,19 @@ Regeln:
         clarResult = await startClarification(supabase, senderPhone, parsed, transcript);
       } catch (err) {
         console.error("startClarification error:", err);
-        clarResult = null;
+        // If DB table missing or other error, tell admin so they can investigate
+        await supabase.from("whatsapp_logs").insert({
+          sender_number: from,
+          transcript,
+          parsed_action: { ...parsed, clarification_error: String(err) },
+          success: false,
+          error_message: String(err),
+        });
+        await sendReply(
+          from,
+          `❌ Interner Fehler beim Starten des Dialogs.\n\nFehler: ${String(err).substring(0, 200)}\n\nBitte im Portal prüfen oder erneut versuchen.`
+        );
+        return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
       }
 
       if (clarResult && !clarResult.done) {
@@ -642,8 +688,11 @@ Regeln:
       }
 
       // All resolved immediately (perfect match on first try)
-      const resolvedData = clarResult?.resolved ?? {};
-      await executeResolvedCommand(supabase, parsed.action, resolvedData, from, transcript);
+      if (clarResult?.done && clarResult.resolved) {
+        await executeResolvedCommand(supabase, parsed.action, clarResult.resolved, from, transcript);
+      } else {
+        await sendReply(from, `⚠️ Befehl konnte nicht vollständig aufgelöst werden. Bitte erneut versuchen.`);
+      }
       return new Response("<Response/>", { status: 200, headers: { "Content-Type": "text/xml" } });
     }
 
